@@ -1,27 +1,38 @@
 # app.py
 #
-# Detta är huvudfilen för Streamlit-appen.
-# När vi kör:
+# Huvudfilen för Streamlit-appen.
 #
-#   streamlit run app.py
+# Den här filen bestämmer vilken "vy" användaren ska se:
 #
-# så startar Streamlit den här filen och bygger webbsidan uppifrån och ner.
+# 1. Adminläge:
+#       http://localhost:8501?admin=1
+#
+# 2. Deltagarläge:
+#       http://localhost:8501?token=...
+#
+# 3. Startsida:
+#       http://localhost:8501
+#
+# Senare kommer vi bryta ut admin- och deltagarvyerna till egna filer
+# om app.py börjar bli för stor.
 
 from pathlib import Path
 
 import pandas as pd
 import streamlit as st
-from src.db import get_participants
+
+from src.auth import build_participant_link, generate_private_token
+from src.repositories.participants_repo import (
+    create_participant,
+    get_active_participants,
+    get_participant_by_token,
+)
 
 
 # ------------------------------------------------------------
 # Sidinställningar
 # ------------------------------------------------------------
-# st.set_page_config måste ligga tidigt i filen.
-# Här sätter vi titel i webbläsarfliken, ikon och sidlayout.
-#
-# layout="centered" gör sidan smalare och enklare på mobil.
-# Senare kan vi testa layout="wide" för admin-sidor med stora tabeller.
+
 st.set_page_config(
     page_title="VM-tipset 2026",
     page_icon="⚽",
@@ -30,102 +41,214 @@ st.set_page_config(
 
 
 # ------------------------------------------------------------
-# Sidhuvud
+# Hjälpfunktioner för app.py
 # ------------------------------------------------------------
-# Streamlit bygger UI med Python-funktioner.
-# st.title skapar en stor rubrik.
-# st.caption skapar mindre hjälptext under rubriken.
-st.title("⚽ VM-tipset 2026")
-st.caption("Privat gruppspelstips för kompisgänget")
+
+def get_query_param(name: str) -> str | None:
+    """
+    Hämtar en query-parameter från URL:en.
+
+    Exempel:
+        http://localhost:8501?token=abc123
+
+    Då ger:
+        get_query_param("token")
+
+    värdet:
+        "abc123"
+
+    st.query_params är Streamlits sätt att läsa URL-parametrar.
+    """
+
+    value = st.query_params.get(name)
+
+    if value is None:
+        return None
+
+    return str(value)
 
 
-# ------------------------------------------------------------
-# Informationsruta
-# ------------------------------------------------------------
-# st.info visar en blå informationsruta.
-# Just nu använder vi den för att tydligt visa att detta bara är första versionen.
-st.info(
-    "Det här är första lokala versionen. "
-    "Nästa steg blir deltagarlänkar, databas och riktiga tips."
-)
+def check_admin_password(password: str) -> bool:
+    """
+    Kontrollerar adminlösenordet mot värdet i secrets.toml.
 
+    Vi håller detta enkelt i MVP:n.
+    Senare kan vi bygga riktig admininloggning om det behövs.
+    """
 
-# ------------------------------------------------------------
-# Enkel MVP-status
-# ------------------------------------------------------------
-# Det här är bara en visuell checklista för oss under utvecklingen.
-# disabled=True betyder att användaren inte kan ändra checkboxen.
-# value=True/False bestämmer om den är ikryssad från start.
-st.header("MVP-status")
-
-st.checkbox("Streamlit kör lokalt", value=True, disabled=True)
-st.checkbox("Git-repo skapat", value=True, disabled=True)
-st.checkbox("Matchdata importerad", value=False, disabled=True)
-st.checkbox("Deltagarlänkar fungerar", value=False, disabled=True)
-st.checkbox("Tips kan sparas", value=False, disabled=True)
-
-
-# ------------------------------------------------------------
-# Visa exempelmatcher från CSV
-# ------------------------------------------------------------
-# Just nu har vi ingen databas.
-# Därför läser vi en enkel CSV-fil från data/matches_template.csv.
-#
-# Path kommer från Python-standardbiblioteket pathlib.
-# Det är ett smidigt sätt att jobba med filvägar som fungerar bra
-# på både macOS, Windows och Linux.
-matches_path = Path("data/matches_template.csv")
-
-st.header("Exempelmatcher")
+    expected_password = st.secrets["app"]["admin_password"]
+    return password == expected_password
 
 
 # ------------------------------------------------------------
-# Kontrollera att filen finns och inte är tom
+# Startsida
 # ------------------------------------------------------------
-# matches_path.exists()
-#   -> True om filen finns
-#
-# matches_path.stat().st_size
-#   -> filens storlek i bytes
-#
-# Om filen finns men är tom vill vi inte försöka läsa den med pandas,
-# eftersom det skulle ge ett fel.
-if matches_path.exists() and matches_path.stat().st_size > 0:
-    # pd.read_csv läser CSV-filen och skapar en DataFrame.
-    # En DataFrame är ungefär som en tabell i Python.
-    matches = pd.read_csv(matches_path)
 
-    # st.dataframe visar DataFrame som en interaktiv tabell i webbsidan.
-    # width="stretch" gör att tabellen använder tillgänglig bredd.
-    st.dataframe(matches, width="stretch")
+def render_start_page() -> None:
+    """
+    Visas om användaren inte har admin=1 eller token i URL:en.
+    """
 
-else:
-    # Om filen saknas eller är tom visar vi en varning i appen
-    # i stället för att appen kraschar.
-    st.warning("Ingen matchfil hittades ännu eller filen är tom.")
-    st.write("Vi kommer snart lägga in en enkel CSV-mall för matcher.")
+    st.title("⚽ VM-tipset 2026")
+    st.caption("Privat gruppspelstips för kompisgänget")
+
+    st.info(
+        "Det här är en privat app. "
+        "Öppna din personliga länk för att lägga tips."
+    )
+
+    st.write("Admin kan öppna adminläget med:")
+
+    st.code("http://localhost:8501?admin=1")
+
 
 # ------------------------------------------------------------
-# Databastest: deltagare från Supabase
+# Adminsida
 # ------------------------------------------------------------
-# Det här är bara ett utvecklingstest.
-# Om detta fungerar vet vi att:
-# 1. Supabase-tabellen finns
-# 2. Secrets fungerar
-# 3. Streamlit kan läsa från databasen
 
-st.header("Databastest")
+def render_admin_page() -> None:
+    """
+    Enkel adminvy.
 
-try:
-    participants = get_participants()
+    Här kan vi just nu:
+    - logga in med adminlösen
+    - skapa deltagare
+    - se deltagarlista
+
+    Senare lägger vi till:
+    - importera matcher
+    - sätta deadline
+    - fylla i resultat
+    """
+
+    st.title("Admin – VM-tipset 2026")
+
+    password = st.text_input("Adminlösenord", type="password")
+
+    if not password:
+        st.warning("Ange adminlösenord för att fortsätta.")
+        return
+
+    if not check_admin_password(password):
+        st.error("Fel adminlösenord.")
+        return
+
+    st.success("Adminläge aktivt ✅")
+
+    st.header("Lägg till deltagare")
+
+    with st.form("create_participant_form"):
+        display_name = st.text_input("Namn på deltagare")
+        submitted = st.form_submit_button("Skapa deltagare")
+
+    if submitted:
+        cleaned_name = display_name.strip()
+
+        if not cleaned_name:
+            st.error("Namn får inte vara tomt.")
+        else:
+            token = generate_private_token()
+            participant = create_participant(cleaned_name, token)
+
+            if participant:
+                base_url = st.secrets["app"]["base_url"]
+                link = build_participant_link(base_url, token)
+
+                st.success(f"Deltagare skapad: {cleaned_name}")
+                st.write("Privat länk:")
+
+                # Viktigt:
+                # Detta är enda gången vi visar den riktiga token.
+                # Databasen sparar bara hashad token.
+                st.code(link)
+                st.info(
+                    "Kopiera länken nu och skicka den till deltagaren. "
+                    "I MVP:n visar vi inte gamla tokenlänkar igen."
+                )
+            else:
+                st.error("Kunde inte skapa deltagare.")
+
+    st.header("Aktiva deltagare")
+
+    participants = get_active_participants()
 
     if participants:
-        st.success("Koppling till Supabase fungerar ✅")
-        st.write("Aktiva deltagare:")
         st.dataframe(participants, width="stretch")
     else:
-        st.warning("Kopplingen fungerar, men inga aktiva deltagare hittades.")
+        st.info("Inga deltagare ännu.")
 
-except Exception as error:
-    st.error("Kunde inte läsa från Supabase.")
-    st.exception(error)
+
+# ------------------------------------------------------------
+# Deltagarsida
+# ------------------------------------------------------------
+
+def render_participant_page(token: str) -> None:
+    """
+    Visas när användaren öppnar sin privata länk.
+
+    Just nu visar vi bara att appen känner igen deltagaren.
+    Nästa pass bygger vi själva tipsformuläret här.
+    """
+
+    participant = get_participant_by_token(token)
+
+    if participant is None:
+        st.title("Ogiltig länk")
+        st.error("Den här deltagarlänken verkar inte vara giltig.")
+        return
+
+    st.title("⚽ VM-tipset 2026")
+    st.success(f"Välkommen, {participant['display_name']}!")
+
+    st.info(
+        "Din privata länk fungerar. "
+        "Nästa steg blir att visa matcher och låta dig lägga tips."
+    )
+
+    st.header("Kommande funktioner")
+
+    st.checkbox("Visa matcher", value=False, disabled=True)
+    st.checkbox("Tippa 1/X/2", value=False, disabled=True)
+    st.checkbox("Tippa över/under 2,5 mål", value=False, disabled=True)
+    st.checkbox("Spara tips", value=False, disabled=True)
+
+
+# ------------------------------------------------------------
+# Tillfälligt utvecklingstest: exempelmatcher
+# ------------------------------------------------------------
+
+def render_dev_match_preview() -> None:
+    """
+    Tillfällig utvecklingsvy som visar CSV-mallen.
+
+    Den här kan vi ta bort eller flytta senare.
+    """
+
+    st.header("Utvecklingstest: exempelmatcher")
+
+    matches_path = Path("data/matches_template.csv")
+
+    if matches_path.exists() and matches_path.stat().st_size > 0:
+        matches = pd.read_csv(matches_path)
+        st.dataframe(matches, width="stretch")
+    else:
+        st.warning("Ingen matchfil hittades ännu eller filen är tom.")
+
+
+# ------------------------------------------------------------
+# App-routing
+# ------------------------------------------------------------
+# Här bestämmer vi vilken vy som ska visas baserat på URL:en.
+
+admin_mode = get_query_param("admin")
+token = get_query_param("token")
+
+if admin_mode == "1":
+    render_admin_page()
+
+elif token:
+    render_participant_page(token)
+
+else:
+    render_start_page()
+    render_dev_match_preview()
