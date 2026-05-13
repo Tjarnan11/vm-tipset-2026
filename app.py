@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from src.db import get_participants
 
 
 # ------------------------------------------------------------
@@ -103,3 +104,28 @@ else:
     # i stället för att appen kraschar.
     st.warning("Ingen matchfil hittades ännu eller filen är tom.")
     st.write("Vi kommer snart lägga in en enkel CSV-mall för matcher.")
+
+# ------------------------------------------------------------
+# Databastest: deltagare från Supabase
+# ------------------------------------------------------------
+# Det här är bara ett utvecklingstest.
+# Om detta fungerar vet vi att:
+# 1. Supabase-tabellen finns
+# 2. Secrets fungerar
+# 3. Streamlit kan läsa från databasen
+
+st.header("Databastest")
+
+try:
+    participants = get_participants()
+
+    if participants:
+        st.success("Koppling till Supabase fungerar ✅")
+        st.write("Aktiva deltagare:")
+        st.dataframe(participants, width="stretch")
+    else:
+        st.warning("Kopplingen fungerar, men inga aktiva deltagare hittades.")
+
+except Exception as error:
+    st.error("Kunde inte läsa från Supabase.")
+    st.exception(error)
