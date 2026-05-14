@@ -101,6 +101,75 @@ def check_admin_password(password: str) -> bool:
     expected_password = st.secrets["app"]["admin_password"]
     return password == expected_password
 
+def check_admin_token(token: str | None) -> bool:
+    """
+    Kontrollerar admin-token från URL:en.
+
+    Detta används för att kunna ha en privat adminlänk som överlever
+    browser-refresh, eftersom st.session_state nollställs vid riktig refresh.
+
+    Viktigt:
+    Den här token ska behandlas som hemlig.
+    Den får inte committas och ska inte delas med deltagare.
+    """
+
+    if not token:
+        return False
+
+    expected_token = st.secrets["app"].get("admin_token")
+
+    if not expected_token:
+        return False
+
+    return token == expected_token
+
+def is_admin_logged_in() -> bool:
+    """
+    Kontrollerar om admin redan är inloggad i den aktuella Streamlit-sessionen.
+
+    st.session_state lever kvar medan användaren använder appen i samma session.
+    Det gör att admin inte behöver skriva lösenordet igen efter varje knapptryck
+    eller rerun i Streamlit.
+    """
+
+    return st.session_state.get("admin_logged_in", False)
+
+
+def render_admin_login() -> bool:
+    """
+    Visar admininloggning om admin inte redan är inloggad.
+
+    Admin kan bli inloggad på två sätt:
+    1. Genom att skriva adminlösenord
+    2. Genom en privat admin-token i URL:en
+
+    URL-token gör att adminläge fungerar även efter browser-refresh.
+    """
+
+    if is_admin_logged_in():
+        return True
+
+    admin_token = get_query_param("admin_token")
+
+    if check_admin_token(admin_token):
+        st.session_state["admin_logged_in"] = True
+        return True
+
+    with st.form("admin_login_form"):
+        password = st.text_input("Adminlösenord", type="password")
+        submitted = st.form_submit_button("Logga in")
+
+    if not submitted:
+        st.warning("Logga in för att fortsätta.")
+        return False
+
+    if check_admin_password(password):
+        st.session_state["admin_logged_in"] = True
+        st.success("Inloggad som admin ✅")
+        st.rerun()
+
+    st.error("Fel adminlösenord.")
+    return False
 
 # ------------------------------------------------------------
 # Startsida
@@ -303,17 +372,14 @@ def render_admin_page() -> None:
 
     st.title("Admin – VM-tipset 2026")
 
-    password = st.text_input("Adminlösenord", type="password")
-
-    if not password:
-        st.warning("Ange adminlösenord för att fortsätta.")
-        return
-
-    if not check_admin_password(password):
-        st.error("Fel adminlösenord.")
+    if not render_admin_login():
         return
 
     st.success("Adminläge aktivt ✅")
+
+    if st.button("Logga ut från admin"):
+        st.session_state["admin_logged_in"] = False
+        st.rerun()
 
     render_deadline_admin_section()
     render_results_admin_section()
