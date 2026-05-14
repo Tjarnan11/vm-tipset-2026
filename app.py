@@ -53,7 +53,13 @@ from src.repositories.participants_repo import (
     get_participant_by_token,
 )
 
-from src.scoring import build_leaderboard
+from src.scoring import (
+    build_leaderboard,
+    calculate_prediction_points,
+    get_goals_pick,
+    get_match_outcome,
+    is_finished_match,
+)
 
 
 # ------------------------------------------------------------
@@ -96,6 +102,7 @@ def get_query_param(name: str) -> str | None:
 
 
 def check_admin_password(password: str) -> bool:
+    
     """
     Kontrollerar adminlösenordet mot värdet i secrets.toml.
 
@@ -105,6 +112,27 @@ def check_admin_password(password: str) -> bool:
 
     expected_password = st.secrets["app"]["admin_password"]
     return password == expected_password
+
+def format_goals_pick_label(goals_pick: str | None) -> str:
+    """
+    Gör om databasvärdet för över/under till svensk UI-text.
+
+    Databasen använder:
+        over
+        under
+
+    UI:t visar:
+        Över 2,5 mål
+        Under 2,5 mål
+    """
+
+    if goals_pick == "over":
+        return "Över 2,5 mål"
+
+    if goals_pick == "under":
+        return "Under 2,5 mål"
+
+    return "-"
 
 def check_admin_token(token: str | None) -> bool:
     """
@@ -758,8 +786,8 @@ def render_predictions_form(
     - välja över/under 2,5 mål
     - spara sina tips
 
-    Just nu finns ingen deadline-låsning.
-    Det lägger vi till i nästa pass.
+    Formuläret låses om deadline har passerat.
+    Efter deadline visas även resultat och poäng per match.
     """
 
     matches = get_matches()
@@ -817,10 +845,52 @@ def render_predictions_form(
             st.markdown(
                 f"**Match {match['match_no']} – Grupp {match['group_name']}**"
             )
+
             st.write(
                 f"{match['home_team']} – {match['away_team']}"
             )
+
             st.caption(f"Avspark: {match['kickoff_at']}")
+
+            # Efter deadline visar vi resultat och spelarens poäng per match.
+            # Före deadline ska deltagaren bara fokusera på att lägga sina tips.
+            if predictions_locked:
+                if is_finished_match(match):
+                    home_goals = int(match["home_goals"])
+                    away_goals = int(match["away_goals"])
+
+                    correct_outcome = get_match_outcome(home_goals, away_goals)
+                    correct_goals_pick = get_goals_pick(home_goals, away_goals)
+
+                    st.markdown(
+                        f"**Resultat:** "
+                        f"{match['home_team']} {home_goals}–{away_goals} {match['away_team']}"
+                    )
+
+                    st.caption(
+                        f"Rätt rad: {correct_outcome} · "
+                        f"{format_goals_pick_label(correct_goals_pick)}"
+                    )
+
+                    if existing:
+                        score = calculate_prediction_points(
+                            prediction=existing,
+                            match=match,
+                        )
+
+                        st.markdown(
+                            f"**Din poäng på matchen:** "
+                            f"{score['points']}/2 "
+                            f"({score['outcome_points']}p 1X2, "
+                            f"{score['goals_points']}p Ö/U)"
+                        )
+                    else:
+                        st.markdown(
+                            "**Din poäng på matchen:** 0/2 "
+                            "(inget sparat tips)"
+                        )
+                else:
+                    st.caption("Resultat: ej spelad eller ej ifylld ännu.")
 
             # Förifyll 1/X/2 om deltagaren redan har tippat matchen.
             existing_outcome = existing["outcome_pick"] if existing else "Välj"
