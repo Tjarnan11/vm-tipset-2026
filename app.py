@@ -281,10 +281,22 @@ def render_results_admin_section() -> None:
 
         match_label_by_id[match["id"]] = label
 
+    match_ids = list(match_label_by_id.keys())
+
+    # Säkerställ att vi har en vald match sparad i session_state.
+    # Detta gör att dropdownen inte hoppar tillbaka till första matchen
+    # varje gång Streamlit kör om sidan.
+    if (
+        "admin_selected_match_id" not in st.session_state
+        or st.session_state["admin_selected_match_id"] not in match_ids
+    ):
+        st.session_state["admin_selected_match_id"] = match_ids[0]
+
     selected_match_id = st.selectbox(
         "Välj match",
-        options=list(match_label_by_id.keys()),
+        options=match_ids,
         format_func=lambda match_id: match_label_by_id[match_id],
+        key="admin_selected_match_id",
     )
 
     selected_match = next(
@@ -311,6 +323,7 @@ def render_results_admin_section() -> None:
         min_value=0,
         step=1,
         value=int(current_home_goals) if current_home_goals is not None else 0,
+        key=f"admin_home_goals_{selected_match_id}",
     )
 
     away_goals = st.number_input(
@@ -318,6 +331,7 @@ def render_results_admin_section() -> None:
         min_value=0,
         step=1,
         value=int(current_away_goals) if current_away_goals is not None else 0,
+        key=f"admin_away_goals_{selected_match_id}",
     )
 
     col1, col2 = st.columns(2)
