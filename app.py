@@ -22,6 +22,7 @@ import pandas as pd
 import streamlit as st
 
 from src.auth import build_participant_link, generate_private_token
+from src.repositories.matches_repo import get_matches
 from src.repositories.participants_repo import (
     create_participant,
     get_active_participants,
@@ -177,6 +178,10 @@ def render_admin_page() -> None:
     else:
         st.info("Inga deltagare ännu.")
 
+    st.header("Matcher i databasen")
+
+    render_matches_table()
+
 
 # ------------------------------------------------------------
 # Deltagarsida
@@ -205,12 +210,61 @@ def render_participant_page(token: str) -> None:
         "Nästa steg blir att visa matcher och låta dig lägga tips."
     )
 
+    st.header("Matcher")
+
+    render_matches_table()
+
     st.header("Kommande funktioner")
 
-    st.checkbox("Visa matcher", value=False, disabled=True)
     st.checkbox("Tippa 1/X/2", value=False, disabled=True)
     st.checkbox("Tippa över/under 2,5 mål", value=False, disabled=True)
     st.checkbox("Spara tips", value=False, disabled=True)
+
+
+def render_matches_table() -> None:
+    """
+    Visar matcher från Supabase.
+
+    Den här funktionen används både på deltagarsidan och admin-sidan.
+    Just nu visar den bara matcherna.
+    I nästa pass bygger vi vidare med tipsformulär.
+    """
+
+    matches = get_matches()
+
+    if not matches:
+        st.warning("Inga matcher hittades i databasen.")
+        return
+
+    # Vi gör om listan av dictionaries till en pandas DataFrame
+    # eftersom Streamlit visar DataFrames snyggt som tabeller.
+    matches_df = pd.DataFrame(matches)
+
+    # Vi väljer bara de kolumner som är relevanta att visa i UI:t.
+    visible_columns = [
+        "match_no",
+        "group_name",
+        "kickoff_at",
+        "home_team",
+        "away_team",
+        "status",
+    ]
+
+    matches_df = matches_df[visible_columns]
+
+    # Byt till svenska kolumnnamn i gränssnittet.
+    matches_df = matches_df.rename(
+        columns={
+            "match_no": "Match",
+            "group_name": "Grupp",
+            "kickoff_at": "Avspark",
+            "home_team": "Hemmalag",
+            "away_team": "Bortalag",
+            "status": "Status",
+        }
+    )
+
+    st.dataframe(matches_df, width="stretch")
 
 
 # ------------------------------------------------------------
