@@ -111,3 +111,30 @@ def clear_match_result(match_id: str) -> dict | None:
         return response.data[0]
 
     return None
+
+
+def upsert_matches(matches: list[dict]) -> list[dict]:
+    """
+    Importerar eller uppdaterar matcher.
+
+    Vi använder match_no som konflikt-nyckel.
+    Det betyder:
+    - om match_no inte finns: skapa ny match
+    - om match_no redan finns: uppdatera befintlig match
+
+    Detta är viktigt eftersom deltagarnas tips kopplas till matchens id.
+    Vi vill därför helst behålla samma matchrad om vi bara rättar lag/tid.
+    """
+
+    if not matches:
+        return []
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("matches")
+        .upsert(matches, on_conflict="match_no")
+        .execute()
+    )
+
+    return response.data

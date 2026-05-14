@@ -44,7 +44,9 @@ from src.repositories.matches_repo import (
     clear_match_result,
     get_matches,
     update_match_result,
+    upsert_matches,
 )
+
 from src.repositories.participants_repo import (
     create_participant,
     get_active_participants,
@@ -369,6 +371,134 @@ def render_results_admin_section() -> None:
             st.error("Kunde inte rensa resultatet.")
 
 
+def render_match_import_admin_section() -> None:
+    """
+    Adminsektion för att importera matcher från CSV.
+
+    CSV-formatet ska vara:
+        match_no,group_name,kickoff_at,home_team,away_team
+
+    Vi använder upsert på match_no, så samma CSV kan köras flera gånger
+    utan att skapa dubbletter.
+    """
+
+    st.header("Importera matcher från CSV")
+
+    st.info(
+        "CSV-filen ska ha kolumnerna: "
+        "match_no, group_name, kickoff_at, home_team, away_team"
+    )
+
+    uploaded_file = st.file_uploader(
+        "Ladda upp match-CSV",
+        type=["csv"],
+    )
+
+    if uploaded_file is None:
+        return
+
+    try:
+        matches_df = pd.read_csv(uploaded_file)
+    except Exception as error:
+        st.error("Kunde inte läsa CSV-filen.")
+        st.exception(error)
+        return
+
+    required_columns = [
+        "match_no",
+        "group_name",
+        "kickoff_at",
+        "home_team",
+        "away_team",
+    ]
+
+    missing_columns = [
+        column for column in required_columns
+        if column not in matches_df.columns
+    ]
+
+    if missing_columns:
+        st.error(
+            "CSV-filen saknar följande kolumner: "
+            f"{', '.join(missing_columns)}"
+        )
+        return
+
+    # Behåll bara kolumnerna vi faktiskt vill importera.
+    matches_df = matches_df[required_columns].copy()
+
+    # Ta bort helt tomma rader om de råkat komma med i CSV:n.
+    matches_df = matches_df.dropna(how="all")
+
+    # Enkel städning av textfält.
+    text_columns = ["group_name", "kickoff_at", "home_team", "away_team"]
+
+    for column in text_columns:
+        matches_df[column] = matches_df[column].astype(str).str.strip()
+
+    # Säkerställ att match_no är heltal.
+    try:
+        matches_df["match_no"] = matches_df["match_no"].astype(int)
+    except Exception:
+        st.error("Kolumnen match_no måste innehålla heltal.")
+        return
+
+    # Validera att inga obligatoriska värden är tomma.
+    invalid_rows = matches_df[
+        (matches_df["group_name"] == "")
+        | (matches_df["kickoff_at"] == "")
+        | (matches_df["home_team"] == "")
+        | (matches_df["away_team"] == "")
+    ]
+
+    if not invalid_rows.empty:
+        st.error("CSV-filen innehåller tomma obligatoriska värden.")
+        st.dataframe(invalid_rows, width="stretch")
+        return
+
+    # Validera att match_no inte har dubbletter i filen.
+    duplicated_match_numbers = matches_df[
+        matches_df["match_no"].duplicated(keep=False)
+    ]
+
+    if not duplicated_match_numbers.empty:
+        st.error("CSV-filen innehåller dubbla matchnummer.")
+        st.dataframe(duplicated_match_numbers, width="stretch")
+        return
+
+    st.subheader("Förhandsgranskning")
+    st.dataframe(matches_df, width="stretch", hide_index=True)
+
+    st.caption(f"Antal matcher i filen: {len(matches_df)}")
+
+    if len(matches_df) != 72:
+        st.warning(
+            "Filen innehåller inte 72 matcher. "
+            "Det är okej för test, men gruppspelet ska till slut ha 72 matcher."
+        )
+
+    import_clicked = st.button("Importera/uppdatera matcher")
+
+    if import_clicked:
+        rows_to_import = []
+
+        for row in matches_df.to_dict(orient="records"):
+            rows_to_import.append(
+                {
+                    "match_no": int(row["match_no"]),
+                    "group_name": row["group_name"],
+                    "kickoff_at": row["kickoff_at"],
+                    "home_team": row["home_team"],
+                    "away_team": row["away_team"],
+                }
+            )
+
+        imported_matches = upsert_matches(rows_to_import)
+
+        st.success(f"Importerade/uppdaterade {len(imported_matches)} matcher ✅")
+        st.info("Ladda om admin-sidan för att se uppdaterad matchlista.")
+
+
 def render_leaderboard_section() -> None:
     """
     Visar poängtabellen.
@@ -467,6 +597,7 @@ def render_admin_page() -> None:
         st.rerun()
 
     render_deadline_admin_section()
+    render_match_import_admin_section()
     render_results_admin_section()
     render_leaderboard_section()
 
