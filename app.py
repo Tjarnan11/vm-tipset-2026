@@ -21,6 +21,12 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 
+from src.repositories.predictions_repo import (
+    delete_predictions_for_matches,
+    get_predictions_for_participant,
+    save_predictions,
+)
+
 from src.auth import build_participant_link, generate_private_token
 from src.repositories.matches_repo import get_matches
 from src.repositories.participants_repo import (
@@ -210,15 +216,9 @@ def render_participant_page(token: str) -> None:
         "Nästa steg blir att visa matcher och låta dig lägga tips."
     )
 
-    st.header("Matcher")
+    st.header("Lägg dina tips")
 
-    render_matches_table()
-
-    st.header("Kommande funktioner")
-
-    st.checkbox("Tippa 1/X/2", value=False, disabled=True)
-    st.checkbox("Tippa över/under 2,5 mål", value=False, disabled=True)
-    st.checkbox("Spara tips", value=False, disabled=True)
+    render_predictions_form(participant)
 
 
 def render_matches_table() -> None:
@@ -265,6 +265,165 @@ def render_matches_table() -> None:
     )
 
     st.dataframe(matches_df, width="stretch")
+
+
+def render_predictions_form(participant: dict) -> None:
+    """
+    Visar formulär där en deltagare kan tippa alla matcher.
+
+    Deltagaren kan:
+    - välja 1/X/2
+    - välja över/under 2,5 mål
+    - spara sina tips
+
+    Just nu finns ingen deadline-låsning.
+    Det lägger vi till i nästa pass.
+    """
+
+    matches = get_matches()
+
+    if not matches:
+        st.warning("Inga matcher hittades i databasen.")
+        return
+
+    participant_id = participant["id"]
+
+    # Hämta befintliga tips från databasen.
+    existing_predictions = get_predictions_for_participant(participant_id)
+
+    # Gör om listan till en dictionary där match_id är nyckel.
+    # Då kan vi snabbt hitta tidigare tips för varje match.
+    predictions_by_match_id = {
+        prediction["match_id"]: prediction
+        for prediction in existing_predictions
+    }
+
+    total_matches = len(matches)
+    completed_matches = len(existing_predictions)
+
+    st.info(f"Du har tippat {completed_matches} av {total_matches} matcher.")
+
+    outcome_options = ["Välj", "1", "X", "2"]
+
+    goals_label_to_value = {
+        "Välj": None,
+        "Över 2,5 mål": "over",
+        "Under 2,5 mål": "under",
+    }
+
+    goals_value_to_label = {
+        "over": "Över 2,5 mål",
+        "under": "Under 2,5 mål",
+    }
+
+    predictions_to_save = []
+    match_ids_to_delete = []
+    incomplete_rows = []
+
+    with st.form("predictions_form"):
+        st.subheader("Dina tips")
+
+        for match in matches:
+            match_id = match["id"]
+            existing = predictions_by_match_id.get(match_id)
+
+            st.markdown(
+                f"**Match {match['match_no']} – Grupp {match['group_name']}**"
+            )
+            st.write(
+                f"{match['home_team']} – {match['away_team']}"
+            )
+            st.caption(f"Avspark: {match['kickoff_at']}")
+
+            # Förifyll 1/X/2 om deltagaren redan har tippat matchen.
+            existing_outcome = existing["outcome_pick"] if existing else "Välj"
+
+            if existing_outcome in outcome_options:
+                outcome_index = outcome_options.index(existing_outcome)
+            else:
+                outcome_index = 0
+
+            outcome_pick = st.selectbox(
+                "1/X/2",
+                options=outcome_options,
+                index=outcome_index,
+                key=f"outcome_{match_id}",
+            )
+
+            # Förifyll över/under om deltagaren redan har tippat matchen.
+            existing_goals_value = existing["goals_pick"] if existing else None
+            existing_goals_label = goals_value_to_label.get(
+                existing_goals_value,
+                "Välj",
+            )
+
+            goals_options = list(goals_label_to_value.keys())
+            goals_index = goals_options.index(existing_goals_label)
+
+            goals_label = st.selectbox(
+                "Över/under 2,5 mål",
+                options=goals_options,
+                index=goals_index,
+                key=f"goals_{match_id}",
+            )
+
+            goals_pick = goals_label_to_value[goals_label]
+
+            # Lite luft mellan matcherna.
+            st.divider()
+
+            # Vi sparar bara matcher där båda valen är gjorda.
+            # Om användaren bara fyllt i ett av två val flaggar vi det.
+            outcome_is_filled = outcome_pick != "Välj"
+            goals_is_filled = goals_pick is not None
+
+            if outcome_is_filled and goals_is_filled:
+                predictions_to_save.append(
+                    {
+                        "match_id": match_id,
+                        "outcome_pick": outcome_pick,
+                        "goals_pick": goals_pick,
+                    }
+                )
+
+            elif outcome_is_filled or goals_is_filled:
+                # Om bara ett av två val är ifyllt vill vi inte spara,
+                # eftersom tipset då är halvklart.
+                incomplete_rows.append(match["match_no"])
+
+            else:
+                # Om båda valen är "Välj" betyder det att användaren vill
+                # lämna matchen otippad.
+                #
+                # Om det redan fanns ett sparat tips för matchen ska vi rensa det.
+                if existing:
+                    match_ids_to_delete.append(match_id)
+
+        submitted = st.form_submit_button("Spara mina tips")
+
+    if submitted:
+        if incomplete_rows:
+            st.error(
+                "Vissa matcher har bara ett av två val ifyllda. "
+                f"Kontrollera match: {', '.join(map(str, incomplete_rows))}"
+            )
+            return
+
+        delete_predictions_for_matches(
+            participant_id=participant_id,
+            match_ids=match_ids_to_delete,
+        )
+
+        saved_predictions = save_predictions(
+            participant_id=participant_id,
+            predictions=predictions_to_save,
+        )
+
+        st.success(
+            f"Sparade {len(saved_predictions)} tips och rensade "
+            f"{len(match_ids_to_delete)} tips ✅"
+        )
+        st.info("Ladda om sidan för att kontrollera att tipsen ligger kvar.")
 
 
 # ------------------------------------------------------------
