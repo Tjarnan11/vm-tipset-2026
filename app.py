@@ -34,6 +34,7 @@ from src.repositories.settings_repo import (
 
 from src.repositories.predictions_repo import (
     delete_predictions_for_matches,
+    get_all_predictions,
     get_predictions_for_participant,
     save_predictions,
 )
@@ -49,6 +50,8 @@ from src.repositories.participants_repo import (
     get_active_participants,
     get_participant_by_token,
 )
+
+from src.scoring import build_leaderboard
 
 
 # ------------------------------------------------------------
@@ -351,6 +354,74 @@ def render_results_admin_section() -> None:
         else:
             st.error("Kunde inte rensa resultatet.")
 
+
+def render_leaderboard_section() -> None:
+    """
+    Visar poängtabellen.
+
+    Poängen räknas dynamiskt från:
+    - deltagare
+    - matcher med resultat
+    - sparade tips
+
+    Vi sparar alltså inte totalpoäng i databasen.
+    Det minskar risken för att poängtabellen blir fel eller inaktuell.
+    """
+
+    st.header("Poängtabell")
+
+    participants = get_active_participants()
+    matches = get_matches()
+    predictions = get_all_predictions()
+
+    finished_matches = [
+        match for match in matches
+        if (
+            match.get("status") == "finished"
+            and match.get("home_goals") is not None
+            and match.get("away_goals") is not None
+        )
+    ]
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    if not finished_matches:
+        st.info("Inga färdigspelade matcher med resultat ännu.")
+        return
+
+    leaderboard = build_leaderboard(
+        participants=participants,
+        matches=matches,
+        predictions=predictions,
+    )
+
+    leaderboard_df = pd.DataFrame(leaderboard)
+
+    visible_columns = [
+        "Placering",
+        "Namn",
+        "Poäng",
+        "Rätt 1X2",
+        "Rätt Ö/U",
+        "Räknade matcher",
+        "Maxpoäng just nu",
+    ]
+
+    leaderboard_df = leaderboard_df[visible_columns]
+
+    st.dataframe(
+        leaderboard_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.caption(
+        "Poäng: 1 poäng för rätt 1/X/2 och 1 poäng för rätt över/under 2,5 mål."
+    )
+
+
 # ------------------------------------------------------------
 # Adminsida
 # ------------------------------------------------------------
@@ -383,6 +454,7 @@ def render_admin_page() -> None:
 
     render_deadline_admin_section()
     render_results_admin_section()
+    render_leaderboard_section()
 
     st.header("Lägg till deltagare")
 
@@ -472,6 +544,11 @@ def render_participant_page(token: str) -> None:
         participant=participant,
         predictions_locked=predictions_locked,
     )
+
+    if predictions_locked:
+        render_leaderboard_section()
+    else:
+        st.info("Poängtabellen visas efter deadline.")
 
 
 def render_matches_table() -> None:

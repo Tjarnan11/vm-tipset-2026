@@ -112,3 +112,24 @@ def delete_predictions_for_matches(
         .in_("match_id", match_ids)
         .execute()
     )
+
+def get_all_predictions() -> list[dict]:
+    """
+    Hämtar alla sparade tips.
+
+    Används för poängtabellen.
+
+    Viktigt:
+    Vi visar inte automatiskt alla tips för deltagare före deadline.
+    Den här funktionen hämtar bara data till server-side poängberäkning.
+    """
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("predictions")
+        .select("participant_id, match_id, outcome_pick, goals_pick")
+        .execute()
+    )
+
+    return response.data
