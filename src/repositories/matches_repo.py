@@ -46,3 +46,68 @@ def get_matches() -> list[dict]:
     )
 
     return response.data
+
+def update_match_result(
+    match_id: str,
+    home_goals: int,
+    away_goals: int,
+) -> dict | None:
+    """
+    Sparar resultat för en match.
+
+    När admin fyller i resultat markerar vi matchen som färdigspelad
+    genom att sätta status = "finished".
+
+    Exempel:
+        home_goals = 2
+        away_goals = 1
+    """
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("matches")
+        .update(
+            {
+                "home_goals": home_goals,
+                "away_goals": away_goals,
+                "status": "finished",
+            }
+        )
+        .eq("id", match_id)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+
+    return None
+
+
+def clear_match_result(match_id: str) -> dict | None:
+    """
+    Rensar resultat för en match.
+
+    Detta är användbart om admin råkat skriva fel resultat.
+    Då sätter vi målen till null och status tillbaka till "scheduled".
+    """
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("matches")
+        .update(
+            {
+                "home_goals": None,
+                "away_goals": None,
+                "status": "scheduled",
+            }
+        )
+        .eq("id", match_id)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+
+    return None

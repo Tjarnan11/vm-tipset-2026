@@ -39,7 +39,11 @@ from src.repositories.predictions_repo import (
 )
 
 from src.auth import build_participant_link, generate_private_token
-from src.repositories.matches_repo import get_matches
+from src.repositories.matches_repo import (
+    clear_match_result,
+    get_matches,
+    update_match_result,
+)
 from src.repositories.participants_repo import (
     create_participant,
     get_active_participants,
@@ -168,6 +172,116 @@ def render_deadline_admin_section() -> None:
 
         st.info("Ladda om sidan om du vill se uppdaterad deadline högst upp.")
 
+def render_results_admin_section() -> None:
+    """
+    Adminsektion för att fylla i matchresultat.
+
+    För MVP:n sparar vi ett resultat åt gången.
+    Det är lite långsammare än en stor tabell, men mycket säkrare:
+    - mindre risk att råka skriva över många matcher
+    - enklare att felsöka
+    - enklare UI på mobil/laptop
+    """
+
+    st.header("Fyll i matchresultat")
+
+    matches = get_matches()
+
+    if not matches:
+        st.warning("Inga matcher hittades i databasen.")
+        return
+
+    # Skapa labels som är läsbara i selectboxen.
+    # Vi behåller samtidigt matchens id internt.
+    match_label_by_id = {}
+
+    for match in matches:
+        result_text = ""
+
+        if match["status"] == "finished":
+            result_text = f" ({match['home_goals']}-{match['away_goals']})"
+
+        label = (
+            f"Match {match['match_no']} – "
+            f"{match['home_team']} vs {match['away_team']}"
+            f"{result_text}"
+        )
+
+        match_label_by_id[match["id"]] = label
+
+    selected_match_id = st.selectbox(
+        "Välj match",
+        options=list(match_label_by_id.keys()),
+        format_func=lambda match_id: match_label_by_id[match_id],
+    )
+
+    selected_match = next(
+        match for match in matches if match["id"] == selected_match_id
+    )
+
+    st.write(
+        f"**{selected_match['home_team']} – {selected_match['away_team']}**"
+    )
+    st.caption(
+        f"Match {selected_match['match_no']} · "
+        f"Grupp {selected_match['group_name']} · "
+        f"Status: {selected_match['status']}"
+    )
+
+    current_home_goals = selected_match["home_goals"]
+    current_away_goals = selected_match["away_goals"]
+
+    # number_input behöver ett startvärde.
+    # Om inget resultat finns använder vi 0 som UI-startvärde,
+    # men inget sparas förrän admin aktivt trycker på knappen.
+    home_goals = st.number_input(
+        f"Mål för {selected_match['home_team']}",
+        min_value=0,
+        step=1,
+        value=int(current_home_goals) if current_home_goals is not None else 0,
+    )
+
+    away_goals = st.number_input(
+        f"Mål för {selected_match['away_team']}",
+        min_value=0,
+        step=1,
+        value=int(current_away_goals) if current_away_goals is not None else 0,
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        save_clicked = st.button("Spara resultat")
+
+    with col2:
+        clear_clicked = st.button("Rensa resultat")
+
+    if save_clicked:
+        updated_match = update_match_result(
+            match_id=selected_match_id,
+            home_goals=int(home_goals),
+            away_goals=int(away_goals),
+        )
+
+        if updated_match:
+            st.success(
+                "Resultat sparat: "
+                f"{selected_match['home_team']} {home_goals}–"
+                f"{away_goals} {selected_match['away_team']}"
+            )
+            st.info("Ladda om sidan för att se uppdaterad status i listan.")
+        else:
+            st.error("Kunde inte spara resultatet.")
+
+    if clear_clicked:
+        cleared_match = clear_match_result(selected_match_id)
+
+        if cleared_match:
+            st.success("Resultatet är rensat.")
+            st.info("Ladda om sidan för att se uppdaterad status i listan.")
+        else:
+            st.error("Kunde inte rensa resultatet.")
+
 # ------------------------------------------------------------
 # Adminsida
 # ------------------------------------------------------------
@@ -202,6 +316,7 @@ def render_admin_page() -> None:
     st.success("Adminläge aktivt ✅")
 
     render_deadline_admin_section()
+    render_results_admin_section()
 
     st.header("Lägg till deltagare")
 
@@ -319,6 +434,8 @@ def render_matches_table() -> None:
         "kickoff_at",
         "home_team",
         "away_team",
+        "home_goals",
+        "away_goals",
         "status",
     ]
 
@@ -332,6 +449,8 @@ def render_matches_table() -> None:
             "kickoff_at": "Avspark",
             "home_team": "Hemmalag",
             "away_team": "Bortalag",
+            "home_goals": "Hem",
+            "away_goals": "Borta",
             "status": "Status",
         }
     )
