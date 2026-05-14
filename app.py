@@ -20,6 +20,17 @@ from pathlib import Path
 
 import pandas as pd
 import streamlit as st
+from datetime import date, time
+
+from src.deadline import (
+    build_deadline_iso_from_swedish_time,
+    format_deadline_swedish,
+    is_deadline_passed,
+)
+from src.repositories.settings_repo import (
+    get_group_stage_deadline,
+    set_group_stage_deadline,
+)
 
 from src.repositories.predictions_repo import (
     delete_predictions_for_matches,
@@ -109,6 +120,54 @@ def render_start_page() -> None:
     st.code("http://localhost:8501?admin=1")
 
 
+def render_deadline_admin_section() -> None:
+    """
+    Adminsektion för att visa och ändra deadline.
+
+    Deadline gäller hela gruppspelstipset.
+    För MVP:n har vi alltså en gemensam deadline för alla matcher.
+    """
+
+    st.header("Deadline")
+
+    current_deadline = get_group_stage_deadline()
+
+    if current_deadline:
+        st.info(
+            "Nuvarande deadline: "
+            f"{format_deadline_swedish(current_deadline)} svensk tid"
+        )
+    else:
+        st.warning("Ingen deadline är satt ännu. Tips är öppna tills deadline sätts.")
+
+    with st.form("deadline_form"):
+        selected_date = st.date_input(
+            "Deadline-datum",
+            value=date(2026, 6, 10),
+        )
+
+        selected_time = st.time_input(
+            "Deadline-tid svensk tid",
+            value=time(20, 0),
+        )
+
+        submitted = st.form_submit_button("Spara deadline")
+
+    if submitted:
+        deadline_iso = build_deadline_iso_from_swedish_time(
+            selected_date,
+            selected_time,
+        )
+
+        set_group_stage_deadline(deadline_iso)
+
+        st.success(
+            "Deadline sparad: "
+            f"{format_deadline_swedish(deadline_iso)} svensk tid"
+        )
+
+        st.info("Ladda om sidan om du vill se uppdaterad deadline högst upp.")
+
 # ------------------------------------------------------------
 # Adminsida
 # ------------------------------------------------------------
@@ -141,6 +200,8 @@ def render_admin_page() -> None:
         return
 
     st.success("Adminläge aktivt ✅")
+
+    render_deadline_admin_section()
 
     st.header("Lägg till deltagare")
 
@@ -216,9 +277,20 @@ def render_participant_page(token: str) -> None:
         "Nästa steg blir att visa matcher och låta dig lägga tips."
     )
 
+    deadline_value = get_group_stage_deadline()
+    predictions_locked = is_deadline_passed(deadline_value)
+
+    st.info(
+        "Deadline: "
+        f"{format_deadline_swedish(deadline_value)} svensk tid"
+    )
+
     st.header("Lägg dina tips")
 
-    render_predictions_form(participant)
+    render_predictions_form(
+        participant=participant,
+        predictions_locked=predictions_locked,
+    )
 
 
 def render_matches_table() -> None:
@@ -267,7 +339,10 @@ def render_matches_table() -> None:
     st.dataframe(matches_df, width="stretch")
 
 
-def render_predictions_form(participant: dict) -> None:
+def render_predictions_form(
+    participant: dict,
+    predictions_locked: bool,
+) -> None:
     """
     Visar formulär där en deltagare kan tippa alla matcher.
 
@@ -302,6 +377,11 @@ def render_predictions_form(participant: dict) -> None:
     completed_matches = len(existing_predictions)
 
     st.info(f"Du har tippat {completed_matches} av {total_matches} matcher.")
+
+    if predictions_locked:
+        st.error("Deadline har passerat. Dina tips är låsta.")
+    else:
+        st.success("Tipsen är öppna. Du kan ändra fram till deadline.")
 
     outcome_options = ["Välj", "1", "X", "2"]
 
@@ -348,6 +428,7 @@ def render_predictions_form(participant: dict) -> None:
                 options=outcome_options,
                 index=outcome_index,
                 key=f"outcome_{match_id}",
+                disabled=predictions_locked,
             )
 
             # Förifyll över/under om deltagaren redan har tippat matchen.
@@ -365,6 +446,7 @@ def render_predictions_form(participant: dict) -> None:
                 options=goals_options,
                 index=goals_index,
                 key=f"goals_{match_id}",
+                disabled=predictions_locked,
             )
 
             goals_pick = goals_label_to_value[goals_label]
@@ -399,9 +481,15 @@ def render_predictions_form(participant: dict) -> None:
                 if existing:
                     match_ids_to_delete.append(match_id)
 
-        submitted = st.form_submit_button("Spara mina tips")
+        submitted = st.form_submit_button(
+            "Spara mina tips",
+            disabled=predictions_locked,
+        )
 
     if submitted:
+        if predictions_locked:
+            st.error("Deadline har passerat. Tipsen kan inte sparas.")
+            return
         if incomplete_rows:
             st.error(
                 "Vissa matcher har bara ett av två val ifyllda. "
