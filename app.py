@@ -851,38 +851,78 @@ def render_participant_links_admin_section() -> None:
 # Adminsida
 # ------------------------------------------------------------
 
-def render_admin_page() -> None:
+def render_admin_overview_section() -> None:
     """
-    Enkel adminvy.
+    Visar en enkel adminöversikt.
 
-    Här kan vi just nu:
-    - logga in med adminlösen
-    - skapa deltagare
-    - se deltagarlista
-
-    Senare lägger vi till:
-    - importera matcher
-    - sätta deadline
-    - fylla i resultat
+    Syftet är att snabbt se:
+    - hur många deltagare som finns
+    - hur många matcher som finns
+    - hur många matcher som har resultat
+    - hur många deltagare som är klara med alla tips
     """
 
-    st.title("Admin – VM-tipset 2026")
+    st.header("Adminöversikt")
 
-    if not render_admin_login():
-        return
+    participants = get_active_participants()
+    matches = get_matches()
+    predictions = get_all_predictions()
+    deadline_value = get_group_stage_deadline()
 
-    st.success("Adminläge aktivt ✅")
+    total_participants = len(participants)
+    total_matches = len(matches)
 
-    if st.button("Logga ut från admin"):
-        st.session_state["admin_logged_in"] = False
-        st.rerun()
+    finished_matches = [
+        match for match in matches
+        if is_finished_match(match)
+    ]
 
-    render_deadline_admin_section()
-    render_participant_status_admin_section()
-    render_participant_links_admin_section()
-    render_match_import_admin_section()
-    render_results_admin_section()
-    render_leaderboard_section()
+    predicted_match_ids_by_participant = {}
+
+    for prediction in predictions:
+        participant_id = prediction["participant_id"]
+        match_id = prediction["match_id"]
+
+        if participant_id not in predicted_match_ids_by_participant:
+            predicted_match_ids_by_participant[participant_id] = set()
+
+        predicted_match_ids_by_participant[participant_id].add(match_id)
+
+    completed_participants = 0
+
+    for participant in participants:
+        participant_id = participant["id"]
+        predicted_match_ids = predicted_match_ids_by_participant.get(
+            participant_id,
+            set(),
+        )
+
+        if total_matches > 0 and len(predicted_match_ids) == total_matches:
+            completed_participants += 1
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric("Deltagare", total_participants)
+        st.metric("Matcher", total_matches)
+
+    with col2:
+        st.metric("Klara deltagare", completed_participants)
+        st.metric("Matcher med resultat", len(finished_matches))
+
+    st.info(
+        "Deadline: "
+        f"{format_deadline_swedish(deadline_value)} svensk tid"
+    )
+
+
+def render_create_participant_admin_section() -> None:
+    """
+    Adminsektion för att skapa nya deltagare.
+
+    När en deltagare skapas genereras en privat token.
+    Token sparas i databasen så att admin kan visa länken igen senare.
+    """
 
     st.header("Lägg till deltagare")
 
@@ -908,23 +948,65 @@ def render_admin_page() -> None:
                 st.code(link)
 
                 st.info(
-                    "Länken är nu också sparad i adminlistan, "
+                    "Länken är också sparad i adminlistan, "
                     "så du kan kopiera den igen senare."
                 )
             else:
                 st.error("Kunde inte skapa deltagare.")
 
-    participants = get_active_participants()
+def render_admin_page() -> None:
+    """
+    Adminvy för VM-tipset.
 
-    if participants:
-        st.dataframe(participants, width="stretch")
-    else:
-        st.info("Inga deltagare ännu.")
+    Adminsidan är uppdelad i flikar för att undvika en lång sida:
+    - Översikt
+    - Deltagare & länkar
+    - Matcher
+    - Resultat
+    - Poängtabell
+    """
 
-    st.header("Matcher i databasen")
+    st.title("Admin – VM-tipset 2026")
 
-    render_matches_table()
+    if not render_admin_login():
+        return
 
+    st.success("Adminläge aktivt ✅")
+
+    if st.button("Logga ut från admin"):
+        st.session_state["admin_logged_in"] = False
+        st.rerun()
+
+    tab_overview, tab_participants, tab_matches, tab_results, tab_leaderboard = st.tabs(
+        [
+            "🏠 Översikt",
+            "👥 Deltagare & länkar",
+            "📅 Matcher",
+            "✍️ Resultat",
+            "📊 Poängtabell",
+        ]
+    )
+
+    with tab_overview:
+        render_admin_overview_section()
+        render_deadline_admin_section()
+
+    with tab_participants:
+        render_create_participant_admin_section()
+        render_participant_status_admin_section()
+        render_participant_links_admin_section()
+
+    with tab_matches:
+        render_match_import_admin_section()
+
+        st.header("Matcher i databasen")
+        render_matches_table()
+
+    with tab_results:
+        render_results_admin_section()
+
+    with tab_leaderboard:
+        render_leaderboard_section()
 
 # ------------------------------------------------------------
 # Deltagarsida
