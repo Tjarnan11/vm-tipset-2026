@@ -91,6 +91,8 @@ def build_leaderboard(
     participants: list[dict],
     matches: list[dict],
     predictions: list[dict],
+    bonus_predictions: list[dict] | None = None,
+    bonus_results: list[dict] | None = None,
 ) -> list[dict]:
     """
     Bygger poängtabellen.
@@ -118,16 +120,38 @@ def build_leaderboard(
         for match in finished_matches
     }
 
+    bonus_predictions = bonus_predictions or []
+    bonus_results = bonus_results or []
+
+    bonus_scorer_by_participant_id = {
+        bonus_prediction["participant_id"]: bonus_prediction["scorer_name"]
+        for bonus_prediction in bonus_predictions
+    }
+
+    bonus_goals_by_scorer_name = {
+        bonus_result["scorer_name"]: int(bonus_result["goals"])
+        for bonus_result in bonus_results
+    }
+
     # Starta varje deltagare på 0 poäng.
     leaderboard_by_participant_id = {}
 
     for participant in participants:
         participant_id = participant["id"]
 
+        bonus_scorer = bonus_scorer_by_participant_id.get(participant_id)
+        bonus_goals = (
+            bonus_goals_by_scorer_name.get(bonus_scorer, 0)
+            if bonus_scorer
+            else 0
+        )
+
         leaderboard_by_participant_id[participant_id] = {
             "participant_id": participant_id,
             "Namn": participant["display_name"],
             "Poäng": 0,
+            "Bonusspelare": bonus_scorer or "-",
+            "Bonusmål": bonus_goals,
             "Rätt 1X2": 0,
             "Rätt Ö/U": 0,
             "Räknade matcher": 0,
@@ -166,6 +190,7 @@ def build_leaderboard(
     leaderboard.sort(
         key=lambda row: (
             -row["Poäng"],
+            -row["Bonusmål"],
             -row["Rätt 1X2"],
             -row["Rätt Ö/U"],
             row["Namn"].lower(),

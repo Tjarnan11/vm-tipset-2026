@@ -69,6 +69,15 @@ from src.scoring import (
     is_finished_match,
 )
 
+from src.repositories.bonus_repo import (
+    delete_bonus_prediction,
+    get_all_bonus_predictions,
+    get_bonus_prediction_for_participant,
+    get_bonus_scorer_results,
+    save_bonus_prediction,
+    upsert_bonus_scorer_result,
+)
+
 from src.group_tables import build_group_tables
 
 # ------------------------------------------------------------
@@ -587,6 +596,8 @@ def render_leaderboard_section() -> None:
     participants = get_active_participants()
     matches = get_matches()
     predictions = get_all_predictions()
+    bonus_predictions = get_all_bonus_predictions()
+    bonus_results = get_bonus_scorer_results()
 
     finished_matches = [
         match for match in matches
@@ -609,6 +620,8 @@ def render_leaderboard_section() -> None:
         participants=participants,
         matches=matches,
         predictions=predictions,
+        bonus_predictions=bonus_predictions,
+        bonus_results=bonus_results,
     )
 
     leaderboard_df = pd.DataFrame(leaderboard)
@@ -617,6 +630,8 @@ def render_leaderboard_section() -> None:
         "Placering",
         "Namn",
         "Poäng",
+        "Bonusspelare",
+        "Bonusmål",
         "Rätt 1X2",
         "Rätt Ö/U",
         "Räknade matcher",
@@ -890,19 +905,30 @@ def render_rules_section() -> None:
         """
     )
 
+    st.subheader("Utslagsfråga")
+
+    st.markdown(
+        """
+        Som utslagsfråga väljer du en spelare som du tror gör flest mål i gruppspelet.
+
+        Utslagsfrågan ger inga extra poäng.
+
+        Den används bara om flera deltagare hamnar på samma totalpoäng.
+        Då hamnar den deltagare vars valda spelare gjort flest gruppspelsmål före.
+        """
+    )
+
     st.subheader("Poängtabell och sortering")
 
     st.markdown(
         """
-        Poängtabellen sorteras i första hand efter totalpoäng.
+        Poängtabellen sorteras så här:
 
-        Vid lika totalpoäng sorteras tabellen just nu efter:
-
-        1. Flest rätt 1/X/2
-        2. Flest rätt över/under 2,5 mål
-        3. Namn i alfabetisk ordning
-
-        Bonusfråga eller annan utslagsregel kan läggas till senare om det behövs.
+        1. Totalpoäng
+        2. Flest mål av vald utslagsfråga-spelare
+        3. Flest rätt 1/X/2
+        4. Flest rätt över/under 2,5 mål
+        5. Namn i alfabetisk ordning
         """
     )
 
@@ -931,6 +957,13 @@ def render_participant_status_admin_section() -> None:
     """
 
     st.header("Deltagarstatus")
+
+    bonus_predictions = get_all_bonus_predictions()
+
+    bonus_participant_ids = {
+        bonus_prediction["participant_id"]
+        for bonus_prediction in bonus_predictions
+    }
 
     participants = get_active_participants()
     matches = get_matches()
@@ -993,6 +1026,11 @@ def render_participant_status_admin_section() -> None:
                     format_datetime_swedish(latest_update)
                     if latest_update
                     else "-"
+                ),
+                "Utslagsfråga": (
+                    "Ifylld ✅"
+                    if participant_id in bonus_participant_ids
+                    else "Saknas"
                 ),
             }
         )
@@ -1278,6 +1316,111 @@ def render_launch_checklist_section() -> None:
     else:
         st.info("Det finns inga aktiva deltagare ännu.")
 
+def render_bonus_admin_section() -> None:
+    """
+    Adminsektion för utslagsfrågan.
+
+    Före deadline visas bara hur många som svarat.
+    Efter deadline visas valda spelare och admin kan fylla i antal gruppspelsmål.
+    """
+
+    st.header("Utslagsfråga")
+
+    deadline_value = get_group_stage_deadline()
+    predictions_locked = is_deadline_passed(deadline_value)
+
+    participants = get_active_participants()
+    bonus_predictions = get_all_bonus_predictions()
+    bonus_results = get_bonus_scorer_results()
+
+    answered_participant_ids = {
+        bonus_prediction["participant_id"]
+        for bonus_prediction in bonus_predictions
+    }
+
+    st.metric(
+        "Svar på utslagsfrågan",
+        f"{len(answered_participant_ids)}/{len(participants)}",
+    )
+
+    if not predictions_locked:
+        st.info(
+            "Valda spelare visas först efter deadline. "
+            "Detta är för att admin inte ska se deltagarnas val i förväg."
+        )
+        return
+
+    if not bonus_predictions:
+        st.warning("Inga bonusval finns ännu.")
+        return
+
+    goals_by_scorer = {
+        bonus_result["scorer_name"]: int(bonus_result["goals"])
+        for bonus_result in bonus_results
+    }
+
+    pick_count_by_scorer = {}
+
+    for bonus_prediction in bonus_predictions:
+        scorer_name = bonus_prediction["scorer_name"]
+
+        if scorer_name not in pick_count_by_scorer:
+            pick_count_by_scorer[scorer_name] = 0
+
+        pick_count_by_scorer[scorer_name] += 1
+
+    rows = []
+
+    for scorer_name, pick_count in pick_count_by_scorer.items():
+        rows.append(
+            {
+                "Spelare": scorer_name,
+                "Antal val": pick_count,
+                "Gruppspelsmål": goals_by_scorer.get(scorer_name, 0),
+            }
+        )
+
+    bonus_df = pd.DataFrame(rows).sort_values(
+        by=["Gruppspelsmål", "Antal val", "Spelare"],
+        ascending=[False, False, True],
+    )
+
+    st.subheader("Valda spelare")
+
+    st.dataframe(
+        bonus_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.subheader("Uppdatera gruppspelsmål")
+
+    scorer_options = sorted(pick_count_by_scorer.keys())
+
+    selected_scorer = st.selectbox(
+        "Välj spelare",
+        options=scorer_options,
+        key="bonus_scorer_select",
+    )
+
+    current_goals = goals_by_scorer.get(selected_scorer, 0)
+
+    goals = st.number_input(
+        "Antal mål i gruppspelet",
+        min_value=0,
+        step=1,
+        value=current_goals,
+        key="bonus_scorer_goals",
+    )
+
+    if st.button("Spara bonusmål"):
+        upsert_bonus_scorer_result(
+            scorer_name=selected_scorer,
+            goals=int(goals),
+        )
+
+        st.success(f"Sparade {int(goals)} mål för {selected_scorer}.")
+        st.info("Uppdatera sidan för att se ändringen i poängtabellen.")
 
 def render_create_participant_admin_section() -> None:
     """
@@ -1345,6 +1488,7 @@ def render_admin_page() -> None:
         tab_participants,
         tab_matches,
         tab_results,
+        tab_bonus,
         tab_leaderboard,
         tab_export,
     ) = st.tabs(
@@ -1353,6 +1497,7 @@ def render_admin_page() -> None:
             "👥 Deltagare & länkar",
             "📅 Matcher",
             "✍️ Resultat",
+            "🎯 Bonus",
             "📊 Poängtabell",
             "⬇️ Export",
         ]
@@ -1378,6 +1523,9 @@ def render_admin_page() -> None:
 
     with tab_results:
         render_results_admin_section()
+
+    with tab_bonus:
+        render_bonus_admin_section()
 
     with tab_leaderboard:
         render_leaderboard_section()
@@ -1643,6 +1791,13 @@ def render_participant_page(token: str) -> None:
             "Deadline: "
             f"{format_deadline_swedish(deadline_value)} svensk tid"
         )
+
+        render_bonus_prediction_section(
+            participant=participant,
+            predictions_locked=predictions_locked,
+        )
+
+        st.divider()
 
         render_predictions_form(
             participant=participant,
@@ -1930,6 +2085,67 @@ def render_group_tables_section() -> None:
         "Tabellen sorteras efter poäng, målskillnad, gjorda mål och lagnamn. "
         "Fullständig officiell tiebreaker-logik kan läggas till senare."
     )
+
+def render_bonus_prediction_section(
+    participant: dict,
+    predictions_locked: bool,
+) -> None:
+    """
+    Visar och sparar deltagarens svar på utslagsfrågan.
+
+    Utslagsfrågan används bara vid lika totalpoäng.
+    Den ger alltså inte extra poäng i grundpoängen.
+    """
+
+    st.subheader("Utslagsfråga")
+
+    st.info(
+        "Vem tror du gör flest mål i gruppspelet? "
+        "Detta används bara som utslagsfråga om flera deltagare får samma poäng."
+    )
+
+    participant_id = participant["id"]
+    existing_bonus = get_bonus_prediction_for_participant(participant_id)
+
+    existing_scorer_name = (
+        existing_bonus["scorer_name"]
+        if existing_bonus
+        else ""
+    )
+
+    if predictions_locked:
+        if existing_scorer_name:
+            st.success(f"Ditt val: {existing_scorer_name}")
+        else:
+            st.warning("Du har inget sparat svar på utslagsfrågan.")
+
+        st.caption("Utslagsfrågan är låst eftersom deadline har passerat.")
+        return
+
+    with st.form("bonus_prediction_form"):
+        scorer_name = st.text_input(
+            "Spelare",
+            value=existing_scorer_name,
+            placeholder="Exempel: Kylian Mbappé",
+        )
+
+        submitted = st.form_submit_button("Spara utslagsfråga")
+
+    if submitted:
+        cleaned_name = scorer_name.strip()
+
+        if cleaned_name:
+            save_bonus_prediction(
+                participant_id=participant_id,
+                scorer_name=cleaned_name,
+            )
+
+            st.toast("Utslagsfrågan är sparad ✅", icon="✅")
+            st.success(f"Sparat val: {cleaned_name}")
+        else:
+            delete_bonus_prediction(participant_id)
+            st.toast("Utslagsfrågan är rensad", icon="🧹")
+            st.info("Utslagsfrågan är rensad.")
 
 def render_predictions_form(
     participant: dict,
