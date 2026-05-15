@@ -52,6 +52,7 @@ from src.repositories.participants_repo import (
     create_participant,
     get_active_participants,
     get_participant_by_token,
+    update_participant_token,
 )
 
 from src.scoring import (
@@ -709,6 +710,100 @@ def render_participant_status_admin_section() -> None:
         "och över/under 2,5 mål sparade."
     )
 
+def render_participant_links_admin_section() -> None:
+    """
+    Visar deltagare och deras privata länkar.
+
+    Detta är adminens huvudvy inför utskick:
+    - se alla deltagare
+    - kopiera privata länkar
+    - exportera deltagarlänkar som CSV
+    - generera ny länk för deltagare som saknar sparad token
+    """
+
+    st.header("Deltagarlänkar")
+
+    participants = get_active_participants()
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    base_url = st.secrets["app"]["base_url"]
+
+    rows = []
+
+    for participant in participants:
+        private_token = participant.get("private_token")
+
+        private_link = (
+            build_participant_link(base_url, private_token)
+            if private_token
+            else ""
+        )
+
+        rows.append(
+            {
+                "Namn": participant["display_name"],
+                "Privat länk": private_link,
+                "Har sparad länk": "Ja" if private_token else "Nej",
+            }
+        )
+
+    links_df = pd.DataFrame(rows)
+
+    st.dataframe(
+        links_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    csv_data = links_df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="Ladda ner deltagarlänkar som CSV",
+        data=csv_data,
+        file_name="vm_tipset_2026_deltagarlankar.csv",
+        mime="text/csv",
+    )
+
+    st.subheader("Återskapa länk")
+
+    st.warning(
+        "Detta används främst för gamla testdeltagare som saknar sparad länk. "
+        "Om deltagaren redan har en fungerande länk kommer den gamla länken "
+        "sluta fungera när du genererar en ny."
+    )
+
+    participant_options = {
+        participant["id"]: participant["display_name"]
+        for participant in participants
+    }
+
+    selected_participant_id = st.selectbox(
+        "Välj deltagare",
+        options=list(participant_options.keys()),
+        format_func=lambda participant_id: participant_options[participant_id],
+        key="regenerate_participant_link_select",
+    )
+
+    if st.button("Generera ny privat länk för vald deltagare"):
+        new_token = generate_private_token()
+
+        updated_participant = update_participant_token(
+            participant_id=selected_participant_id,
+            token=new_token,
+        )
+
+        if updated_participant:
+            new_link = build_participant_link(base_url, new_token)
+
+            st.success("Ny privat länk skapad.")
+            st.code(new_link)
+            st.info("Ladda om sidan för att se länken i tabellen ovan.")
+        else:
+            st.error("Kunde inte generera ny länk.")
+
 
 # ------------------------------------------------------------
 # Adminsida
@@ -742,6 +837,7 @@ def render_admin_page() -> None:
 
     render_deadline_admin_section()
     render_participant_status_admin_section()
+    render_participant_links_admin_section()
     render_match_import_admin_section()
     render_results_admin_section()
     render_leaderboard_section()
@@ -767,19 +863,14 @@ def render_admin_page() -> None:
 
                 st.success(f"Deltagare skapad: {cleaned_name}")
                 st.write("Privat länk:")
-
-                # Viktigt:
-                # Detta är enda gången vi visar den riktiga token.
-                # Databasen sparar bara hashad token.
                 st.code(link)
+
                 st.info(
-                    "Kopiera länken nu och skicka den till deltagaren. "
-                    "I MVP:n visar vi inte gamla tokenlänkar igen."
+                    "Länken är nu också sparad i adminlistan, "
+                    "så du kan kopiera den igen senare."
                 )
             else:
                 st.error("Kunde inte skapa deltagare.")
-
-    st.header("Aktiva deltagare")
 
     participants = get_active_participants()
 
