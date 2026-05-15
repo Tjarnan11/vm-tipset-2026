@@ -601,6 +601,44 @@ def render_leaderboard_section() -> None:
         "Poäng: 1 poäng för rätt 1/X/2 och 1 poäng för rätt över/under 2,5 mål."
     )
 
+def render_rules_section() -> None:
+    """
+    Visar reglerna för VM-tipset.
+
+    Den här sektionen är publik för deltagaren och kan visas både före
+    och efter deadline.
+    """
+
+    st.header("Regler")
+
+    st.markdown(
+        """
+        **Så fungerar gruppspelstipset:**
+
+        För varje gruppspelsmatch tippar du två saker:
+
+        1. **1/X/2**
+           - `1` = hemmalaget vinner
+           - `X` = oavgjort
+           - `2` = bortalaget vinner
+
+        2. **Över/under 2,5 mål**
+           - Över 2,5 mål = matchen får 3 mål eller fler
+           - Under 2,5 mål = matchen får 0, 1 eller 2 mål
+
+        **Poäng:**
+
+        - 1 poäng för rätt 1/X/2
+        - 1 poäng för rätt över/under 2,5 mål
+        - Max 2 poäng per match
+
+        **Deadline:**
+
+        Tips kan ändras fram till deadline. Efter deadline låses tipsen.
+        """
+    )
+
+
 def render_participant_status_admin_section() -> None:
     """
     Visar status för deltagarnas tips.
@@ -918,22 +956,37 @@ def render_participant_page(token: str) -> None:
     deadline_value = get_group_stage_deadline()
     predictions_locked = is_deadline_passed(deadline_value)
 
-    st.info(
-        "Deadline: "
-        f"{format_deadline_swedish(deadline_value)} svensk tid"
+    tab_tips, tab_leaderboard, tab_matches, tab_rules = st.tabs(
+        [
+            "📝 Mina tips",
+            "📊 Poängtabell",
+            "📅 Matcher & resultat",
+            "ℹ️ Regler",
+        ]
     )
 
-    st.header("Lägg dina tips")
+    with tab_tips:
+        st.info(
+            "Deadline: "
+            f"{format_deadline_swedish(deadline_value)} svensk tid"
+        )
 
-    render_predictions_form(
-        participant=participant,
-        predictions_locked=predictions_locked,
-    )
+        render_predictions_form(
+            participant=participant,
+            predictions_locked=predictions_locked,
+        )
 
-    if predictions_locked:
-        render_leaderboard_section()
-    else:
-        st.info("Poängtabellen visas efter deadline.")
+    with tab_leaderboard:
+        if predictions_locked:
+            render_leaderboard_section()
+        else:
+            st.info("Poängtabellen visas efter deadline.")
+
+    with tab_matches:
+        render_public_matches_results_section()
+
+    with tab_rules:
+        render_rules_section()
 
 
 def render_matches_table() -> None:
@@ -991,6 +1044,53 @@ def render_matches_table() -> None:
 
     st.dataframe(matches_df, width="stretch")
 
+def render_public_matches_results_section() -> None:
+    """
+    Visar alla matcher och resultat i ett mer läsbart format.
+
+    Detta är inte tipsformuläret, utan en ren översikt:
+    - schema före match
+    - resultat efter att admin fyllt i resultat
+    """
+
+    st.header("Matcher & resultat")
+
+    matches = get_matches()
+
+    if not matches:
+        st.warning("Inga matcher hittades i databasen.")
+        return
+
+    last_date_heading = None
+
+    for match in matches:
+        date_heading = format_date_swedish(match["kickoff_at"])
+
+        if date_heading != last_date_heading:
+            st.markdown(f"### {date_heading}")
+            last_date_heading = date_heading
+
+        with st.container(border=True):
+            st.markdown(
+                f"**Match {match['match_no']} · Grupp {match['group_name']}**"
+            )
+
+            st.markdown(
+                f"### {match['home_team']} – {match['away_team']}"
+            )
+
+            st.caption(
+                f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
+            )
+
+            if is_finished_match(match):
+                st.success(
+                    f"Resultat: {match['home_team']} "
+                    f"{match['home_goals']}–{match['away_goals']} "
+                    f"{match['away_team']}"
+                )
+            else:
+                st.info("Resultat: ej ifyllt ännu")
 
 def render_predictions_form(
     participant: dict,
