@@ -1290,6 +1290,9 @@ def render_admin_export_section() -> None:
     matches = get_matches()
     predictions = get_all_predictions()
 
+    deadline_value = get_group_stage_deadline()
+    predictions_locked = is_deadline_passed(deadline_value)
+
     if not participants:
         st.info("Inga deltagare finns ännu.")
         return
@@ -1369,69 +1372,74 @@ def render_admin_export_section() -> None:
     # Export 3: Alla tips i långformat
     # ------------------------------------------------------------
 
-    participant_name_by_id = {
-        participant["id"]: participant["display_name"]
-        for participant in participants
-    }
-
-    match_by_id = {
-        match["id"]: match
-        for match in matches
-    }
-
-    prediction_rows = []
-
-    for prediction in predictions:
-        participant_id = prediction["participant_id"]
-        match_id = prediction["match_id"]
-
-        participant_name = participant_name_by_id.get(
-            participant_id,
-            "Okänd deltagare",
-        )
-
-        match = match_by_id.get(match_id)
-
-        if match is None:
-            continue
-
-        prediction_rows.append(
-            {
-                "Deltagare": participant_name,
-                "Match": match["match_no"],
-                "Grupp": match["group_name"],
-                "Avspark": format_datetime_swedish(match["kickoff_at"]),
-                "Hemmalag": match["home_team"],
-                "Bortalag": match["away_team"],
-                "Tips 1X2": prediction["outcome_pick"],
-                "Tips över/under": format_goals_pick_label(
-                    prediction["goals_pick"]
-                ),
-                "Senast uppdaterad": format_datetime_swedish(
-                    prediction.get("updated_at")
-                ),
-            }
-        )
-
-    predictions_df = pd.DataFrame(prediction_rows)
-
     st.subheader("Alla tips")
 
-    if predictions_df.empty:
-        st.info("Inga tips finns att exportera ännu.")
+    if not predictions_locked:
+        st.warning(
+            "Alla tips kan exporteras först efter deadline. "
+            "Detta är för att admin inte ska råka se deltagarnas tips i förväg."
+        )
     else:
-        predictions_df = predictions_df.sort_values(
-            by=["Deltagare", "Match"],
-            ascending=[True, True],
-        )
+        participant_name_by_id = {
+            participant["id"]: participant["display_name"]
+            for participant in participants
+        }
 
-        st.download_button(
-            label="Ladda ner alla tips CSV",
-            data=dataframe_to_csv_bytes(predictions_df),
-            file_name="vm_tipset_2026_alla_tips.csv",
-            mime="text/csv",
-        )
+        match_by_id = {
+            match["id"]: match
+            for match in matches
+        }
 
+        prediction_rows = []
+
+        for prediction in predictions:
+            participant_id = prediction["participant_id"]
+            match_id = prediction["match_id"]
+
+            participant_name = participant_name_by_id.get(
+                participant_id,
+                "Okänd deltagare",
+            )
+
+            match = match_by_id.get(match_id)
+
+            if match is None:
+                continue
+
+            prediction_rows.append(
+                {
+                    "Deltagare": participant_name,
+                    "Match": match["match_no"],
+                    "Grupp": match["group_name"],
+                    "Avspark": format_datetime_swedish(match["kickoff_at"]),
+                    "Hemmalag": match["home_team"],
+                    "Bortalag": match["away_team"],
+                    "Tips 1X2": prediction["outcome_pick"],
+                    "Tips över/under": format_goals_pick_label(
+                        prediction["goals_pick"]
+                    ),
+                    "Senast uppdaterad": format_datetime_swedish(
+                        prediction.get("updated_at")
+                    ),
+                }
+            )
+
+        predictions_df = pd.DataFrame(prediction_rows)
+
+        if predictions_df.empty:
+            st.info("Inga tips finns att exportera ännu.")
+        else:
+            predictions_df = predictions_df.sort_values(
+                by=["Deltagare", "Match"],
+                ascending=[True, True],
+            )
+
+            st.download_button(
+                label="Ladda ner alla tips CSV",
+                data=dataframe_to_csv_bytes(predictions_df),
+                file_name="vm_tipset_2026_alla_tips.csv",
+                mime="text/csv",
+            )
     # ------------------------------------------------------------
     # Export 4: Deltagarstatus
     # ------------------------------------------------------------
