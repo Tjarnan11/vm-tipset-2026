@@ -1094,6 +1094,16 @@ def render_predictions_form(
     with st.form("predictions_form", border=False):
         st.subheader("Dina tips")
 
+        submitted_top = st.form_submit_button(
+            "Spara ändringar",
+            disabled=predictions_locked,
+            key="save_predictions_top",
+        )
+
+        st.caption(
+            "Tipsen sparas först när du trycker på Spara ändringar."
+        )
+
         last_date_heading = None
 
         for match in matches_to_render:
@@ -1219,10 +1229,13 @@ def render_predictions_form(
             # Lite luft mellan korten.
             st.write("")
 
-        submitted = st.form_submit_button(
+        submitted_bottom = st.form_submit_button(
             "Spara ändringar",
             disabled=predictions_locked,
-        )
+            key="save_predictions_bottom",
+        )   
+
+    submitted = submitted_top or submitted_bottom
 
     if submitted:
         if predictions_locked:
@@ -1245,11 +1258,16 @@ def render_predictions_form(
             predictions=predictions_to_save,
         )
 
+        st.toast(
+            f"Sparade {len(saved_predictions)} tips och rensade "
+            f"{len(match_ids_to_delete)} tips ✅",
+            icon="✅",
+        )
+
         st.success(
             f"Sparade {len(saved_predictions)} tips och rensade "
             f"{len(match_ids_to_delete)} tips ✅"
         )
-        st.info("Ladda om sidan för att kontrollera att tipsen ligger kvar.")
 
 
 # ------------------------------------------------------------
