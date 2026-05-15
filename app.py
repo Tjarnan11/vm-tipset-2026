@@ -1358,16 +1358,37 @@ def render_predictions_form(
             predictions=predictions_to_save,
         )
 
-        saved_count = len(saved_predictions)
+        existing_match_ids = set(predictions_by_match_id.keys())
+
+        saved_match_ids = {
+            prediction["match_id"]
+            for prediction in predictions_to_save
+        }
+
+        deleted_match_ids = set(match_ids_to_delete)
+
+        # Räkna ut hur många matcher som är ifyllda efter sparningen.
+        # Detta är bättre än len(saved_predictions), eftersom saved_predictions
+        # bara gäller det som skickades till databasen i just denna sparning.
+        filled_match_ids_after_save = (
+            existing_match_ids
+            | saved_match_ids
+        ) - deleted_match_ids
+
+        filled_count_after_save = len(filled_match_ids_after_save)
         cleared_count = len(match_ids_to_delete)
 
         if cleared_count > 0:
             save_message = (
                 f"Dina tips är sparade ✅ "
-                f"({saved_count} ifyllda, {cleared_count} rensade)"
+                f"({filled_count_after_save}/{total_matches} ifyllda, "
+                f"{cleared_count} rensade)"
             )
         else:
-            save_message = f"Dina tips är sparade ✅ ({saved_count} ifyllda)"
+            save_message = (
+                f"Dina tips är sparade ✅ "
+                f"({filled_count_after_save}/{total_matches} ifyllda)"
+            )
 
         st.toast(save_message, icon="✅")
         st.success(save_message)
