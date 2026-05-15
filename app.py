@@ -1258,16 +1258,19 @@ def render_predictions_form(
             predictions=predictions_to_save,
         )
 
-        st.toast(
-            f"Sparade {len(saved_predictions)} tips och rensade "
-            f"{len(match_ids_to_delete)} tips ✅",
-            icon="✅",
-        )
+        saved_count = len(saved_predictions)
+        cleared_count = len(match_ids_to_delete)
 
-        st.success(
-            f"Sparade {len(saved_predictions)} tips och rensade "
-            f"{len(match_ids_to_delete)} tips ✅"
-        )
+        if cleared_count > 0:
+            save_message = (
+                f"Dina tips är sparade ✅ "
+                f"({saved_count} ifyllda, {cleared_count} rensade)"
+            )
+        else:
+            save_message = f"Dina tips är sparade ✅ ({saved_count} ifyllda)"
+
+        st.toast(save_message, icon="✅")
+        st.success(save_message)
 
 
 # ------------------------------------------------------------
