@@ -75,3 +75,57 @@ def format_datetime_swedish(datetime_value: str | None) -> str:
     time_text = swedish_datetime.strftime("%H:%M")
 
     return f"{weekday} {day} {month}, {time_text}"
+
+
+def format_date_swedish(datetime_value: str | None) -> str:
+    """
+    Formaterar en datetime-sträng till svensk datumtext utan klockslag.
+
+    Exempel:
+        Torsdag 11 juni
+
+    Används för att gruppera matcher per matchdag i UI:t.
+    """
+
+    if not datetime_value:
+        return "-"
+
+    normalized_value = str(datetime_value).replace("Z", "+00:00")
+
+    parsed_datetime = datetime.fromisoformat(normalized_value)
+
+    if parsed_datetime.tzinfo is None:
+        parsed_datetime = parsed_datetime.replace(tzinfo=timezone.utc)
+
+    swedish_datetime = parsed_datetime.astimezone(SWEDEN_TZ)
+
+    weekday_labels = {
+        0: "Måndag",
+        1: "Tisdag",
+        2: "Onsdag",
+        3: "Torsdag",
+        4: "Fredag",
+        5: "Lördag",
+        6: "Söndag",
+    }
+
+    month_labels = {
+        1: "januari",
+        2: "februari",
+        3: "mars",
+        4: "april",
+        5: "maj",
+        6: "juni",
+        7: "juli",
+        8: "augusti",
+        9: "september",
+        10: "oktober",
+        11: "november",
+        12: "december",
+    }
+
+    weekday = weekday_labels[swedish_datetime.weekday()]
+    day = swedish_datetime.day
+    month = month_labels[swedish_datetime.month]
+
+    return f"{weekday} {day} {month}"

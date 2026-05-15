@@ -21,7 +21,11 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 from datetime import date, time
-from src.time_utils import format_datetime_swedish
+
+from src.time_utils import (
+    format_date_swedish,
+    format_datetime_swedish,
+)
 
 from src.deadline import (
     build_deadline_iso_from_swedish_time,
@@ -1025,12 +1029,50 @@ def render_predictions_form(
     total_matches = len(matches)
     completed_matches = len(existing_predictions)
 
-    st.info(f"Du har tippat {completed_matches} av {total_matches} matcher.")
+    completion_ratio = (
+        completed_matches / total_matches
+        if total_matches > 0
+        else 0
+    )
+
+    st.subheader("Din status")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.metric("Tippade matcher", f"{completed_matches}/{total_matches}")
+
+    with col2:
+        st.metric("Saknas", total_matches - completed_matches)
+
+    st.progress(completion_ratio)
 
     if predictions_locked:
         st.error("Deadline har passerat. Dina tips är låsta.")
     else:
         st.success("Tipsen är öppna. Du kan ändra fram till deadline.")
+
+    st.caption(
+        "För varje match tippar du både 1/X/2 och över/under 2,5 mål."
+    )
+
+    view_filter = st.radio(
+        "Visa matcher",
+        options=["Alla matcher", "Endast otippade"],
+        horizontal=True,
+    )
+
+    if view_filter == "Endast otippade":
+        matches_to_render = [
+            match for match in matches
+            if match["id"] not in predictions_by_match_id
+        ]
+    else:
+        matches_to_render = matches
+
+    if not matches_to_render:
+        st.success("Alla matcher i detta filter är tippade ✅")
+        return
 
     outcome_options = ["Välj", "1", "X", "2"]
 
@@ -1049,133 +1091,136 @@ def render_predictions_form(
     match_ids_to_delete = []
     incomplete_rows = []
 
-    with st.form("predictions_form"):
+    with st.form("predictions_form", border=False):
         st.subheader("Dina tips")
 
-        for match in matches:
+        last_date_heading = None
+
+        for match in matches_to_render:
             match_id = match["id"]
             existing = predictions_by_match_id.get(match_id)
 
-            st.markdown(
-                f"**Match {match['match_no']} – Grupp {match['group_name']}**"
-            )
+            date_heading = format_date_swedish(match["kickoff_at"])
 
-            st.write(
-                f"{match['home_team']} – {match['away_team']}"
-            )
+            if date_heading != last_date_heading:
+                st.markdown(f"### {date_heading}")
+                last_date_heading = date_heading
 
-            st.caption(
-                f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
-            )
-
-            # Efter deadline visar vi resultat och spelarens poäng per match.
-            # Före deadline ska deltagaren bara fokusera på att lägga sina tips.
-            if predictions_locked:
-                if is_finished_match(match):
-                    home_goals = int(match["home_goals"])
-                    away_goals = int(match["away_goals"])
-
-                    correct_outcome = get_match_outcome(home_goals, away_goals)
-                    correct_goals_pick = get_goals_pick(home_goals, away_goals)
-
-                    st.markdown(
-                        f"**Resultat:** "
-                        f"{match['home_team']} {home_goals}–{away_goals} {match['away_team']}"
-                    )
-
-                    st.caption(
-                        f"Rätt rad: {correct_outcome} · "
-                        f"{format_goals_pick_label(correct_goals_pick)}"
-                    )
-
-                    if existing:
-                        score = calculate_prediction_points(
-                            prediction=existing,
-                            match=match,
-                        )
-
-                        st.markdown(
-                            f"**Din poäng på matchen:** "
-                            f"{score['points']}/2 "
-                            f"({score['outcome_points']}p 1X2, "
-                            f"{score['goals_points']}p Ö/U)"
-                        )
-                    else:
-                        st.markdown(
-                            "**Din poäng på matchen:** 0/2 "
-                            "(inget sparat tips)"
-                        )
-                else:
-                    st.caption("Resultat: ej spelad eller ej ifylld ännu.")
-
-            # Förifyll 1/X/2 om deltagaren redan har tippat matchen.
-            existing_outcome = existing["outcome_pick"] if existing else "Välj"
-
-            if existing_outcome in outcome_options:
-                outcome_index = outcome_options.index(existing_outcome)
-            else:
-                outcome_index = 0
-
-            outcome_pick = st.selectbox(
-                "1/X/2",
-                options=outcome_options,
-                index=outcome_index,
-                key=f"outcome_{match_id}",
-                disabled=predictions_locked,
-            )
-
-            # Förifyll över/under om deltagaren redan har tippat matchen.
-            existing_goals_value = existing["goals_pick"] if existing else None
-            existing_goals_label = goals_value_to_label.get(
-                existing_goals_value,
-                "Välj",
-            )
-
-            goals_options = list(goals_label_to_value.keys())
-            goals_index = goals_options.index(existing_goals_label)
-
-            goals_label = st.selectbox(
-                "Över/under 2,5 mål",
-                options=goals_options,
-                index=goals_index,
-                key=f"goals_{match_id}",
-                disabled=predictions_locked,
-            )
-
-            goals_pick = goals_label_to_value[goals_label]
-
-            # Lite luft mellan matcherna.
-            st.divider()
-
-            # Vi sparar bara matcher där båda valen är gjorda.
-            # Om användaren bara fyllt i ett av två val flaggar vi det.
-            outcome_is_filled = outcome_pick != "Välj"
-            goals_is_filled = goals_pick is not None
-
-            if outcome_is_filled and goals_is_filled:
-                predictions_to_save.append(
-                    {
-                        "match_id": match_id,
-                        "outcome_pick": outcome_pick,
-                        "goals_pick": goals_pick,
-                    }
+            with st.container(border=True):
+                st.markdown(
+                    f"**Match {match['match_no']} · Grupp {match['group_name']}**"
                 )
 
-            elif outcome_is_filled or goals_is_filled:
-                # Om bara ett av två val är ifyllt vill vi inte spara,
-                # eftersom tipset då är halvklart.
-                incomplete_rows.append(match["match_no"])
+                st.markdown(
+                    f"### {match['home_team']} – {match['away_team']}"
+                )
 
-            else:
-                # Om båda valen är "Välj" betyder det att användaren vill
-                # lämna matchen otippad.
-                #
-                # Om det redan fanns ett sparat tips för matchen ska vi rensa det.
-                if existing:
-                    match_ids_to_delete.append(match_id)
+                st.caption(
+                    f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
+                )
+
+                # Efter deadline visar vi resultat och spelarens poäng per match.
+                # Före deadline ska deltagaren bara fokusera på att lägga sina tips.
+                if predictions_locked:
+                    if is_finished_match(match):
+                        home_goals = int(match["home_goals"])
+                        away_goals = int(match["away_goals"])
+
+                        correct_outcome = get_match_outcome(home_goals, away_goals)
+                        correct_goals_pick = get_goals_pick(home_goals, away_goals)
+
+                        st.markdown(
+                            f"**Resultat:** "
+                            f"{match['home_team']} {home_goals}–{away_goals} {match['away_team']}"
+                        )
+
+                        st.caption(
+                            f"Rätt rad: {correct_outcome} · "
+                            f"{format_goals_pick_label(correct_goals_pick)}"
+                        )
+
+                        if existing:
+                            score = calculate_prediction_points(
+                                prediction=existing,
+                                match=match,
+                            )
+
+                            st.markdown(
+                                f"**Din poäng på matchen:** "
+                                f"{score['points']}/2 "
+                                f"({score['outcome_points']}p 1X2, "
+                                f"{score['goals_points']}p Ö/U)"
+                            )
+                        else:
+                            st.markdown(
+                                "**Din poäng på matchen:** 0/2 "
+                                "(inget sparat tips)"
+                            )
+                    else:
+                        st.caption("Resultat: ej spelad eller ej ifylld ännu.")
+
+                # Förifyll 1/X/2 om deltagaren redan har tippat matchen.
+                existing_outcome = existing["outcome_pick"] if existing else "Välj"
+
+                if existing_outcome in outcome_options:
+                    outcome_index = outcome_options.index(existing_outcome)
+                else:
+                    outcome_index = 0
+
+                outcome_pick = st.selectbox(
+                    "1/X/2",
+                    options=outcome_options,
+                    index=outcome_index,
+                    key=f"outcome_{match_id}",
+                    disabled=predictions_locked,
+                )
+
+                # Förifyll över/under om deltagaren redan har tippat matchen.
+                existing_goals_value = existing["goals_pick"] if existing else None
+                existing_goals_label = goals_value_to_label.get(
+                    existing_goals_value,
+                    "Välj",
+                )
+
+                goals_options = list(goals_label_to_value.keys())
+                goals_index = goals_options.index(existing_goals_label)
+
+                goals_label = st.selectbox(
+                    "Över/under 2,5 mål",
+                    options=goals_options,
+                    index=goals_index,
+                    key=f"goals_{match_id}",
+                    disabled=predictions_locked,
+                )
+
+                goals_pick = goals_label_to_value[goals_label]
+
+                # Vi sparar bara matcher där båda valen är gjorda.
+                # Om användaren bara fyllt i ett av två val flaggar vi det.
+                outcome_is_filled = outcome_pick != "Välj"
+                goals_is_filled = goals_pick is not None
+
+                if outcome_is_filled and goals_is_filled:
+                    predictions_to_save.append(
+                        {
+                            "match_id": match_id,
+                            "outcome_pick": outcome_pick,
+                            "goals_pick": goals_pick,
+                        }
+                    )
+
+                elif outcome_is_filled or goals_is_filled:
+                    incomplete_rows.append(match["match_no"])
+
+                else:
+                    if existing:
+                        match_ids_to_delete.append(match_id)
+
+            # Lite luft mellan korten.
+            st.write("")
 
         submitted = st.form_submit_button(
-            "Spara mina tips",
+            "Spara ändringar",
             disabled=predictions_locked,
         )
 
