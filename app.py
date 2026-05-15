@@ -21,6 +21,7 @@ from pathlib import Path
 import pandas as pd
 import streamlit as st
 from datetime import date, time
+from src.time_utils import format_datetime_swedish
 
 from src.deadline import (
     build_deadline_iso_from_swedish_time,
@@ -305,6 +306,7 @@ def render_results_admin_section() -> None:
 
         label = (
             f"Match {match['match_no']} – "
+            f"{format_datetime_swedish(match['kickoff_at'])} – "
             f"{match['home_team']} vs {match['away_team']}"
             f"{result_text}"
         )
@@ -339,6 +341,7 @@ def render_results_admin_section() -> None:
     st.caption(
         f"Match {selected_match['match_no']} · "
         f"Grupp {selected_match['group_name']} · "
+        f"Avspark: {format_datetime_swedish(selected_match['kickoff_at'])} svensk tid · "
         f"Status: {selected_match['status']}"
     )
 
@@ -757,6 +760,12 @@ def render_matches_table() -> None:
 
     matches_df = matches_df[visible_columns]
 
+    # Supabase returnerar ofta timestamptz i UTC.
+    # Vi visar avspark i svensk tid i UI:t.
+    matches_df["kickoff_at"] = matches_df["kickoff_at"].apply(
+        format_datetime_swedish
+    )
+
     # Byt till svenska kolumnnamn i gränssnittet.
     matches_df = matches_df.rename(
         columns={
@@ -850,7 +859,9 @@ def render_predictions_form(
                 f"{match['home_team']} – {match['away_team']}"
             )
 
-            st.caption(f"Avspark: {match['kickoff_at']}")
+            st.caption(
+                f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
+            )
 
             # Efter deadline visar vi resultat och spelarens poäng per match.
             # Före deadline ska deltagaren bara fokusera på att lägga sina tips.
