@@ -128,7 +128,7 @@ def get_all_predictions() -> list[dict]:
 
     response = (
         supabase.table("predictions")
-        .select("participant_id, match_id, outcome_pick, goals_pick")
+        .select("participant_id, match_id, outcome_pick, goals_pick, updated_at")
         .execute()
     )
 

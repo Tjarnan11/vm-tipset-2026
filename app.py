@@ -596,6 +596,119 @@ def render_leaderboard_section() -> None:
         "Poäng: 1 poäng för rätt 1/X/2 och 1 poäng för rätt över/under 2,5 mål."
     )
 
+def render_participant_status_admin_section() -> None:
+    """
+    Visar status för deltagarnas tips.
+
+    Admin kan använda detta för att se:
+    - vilka deltagare som har börjat tippa
+    - vilka som har tippat alla matcher
+    - hur många matcher som saknas per deltagare
+    - när deltagaren senast sparade sina tips
+    """
+
+    st.header("Deltagarstatus")
+
+    participants = get_active_participants()
+    matches = get_matches()
+    predictions = get_all_predictions()
+
+    total_matches = len(matches)
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    if total_matches == 0:
+        st.warning("Inga matcher finns i databasen ännu.")
+        return
+
+    # Samla sparade tips per deltagare.
+    predicted_match_ids_by_participant = {}
+    latest_update_by_participant = {}
+
+    for prediction in predictions:
+        participant_id = prediction["participant_id"]
+        match_id = prediction["match_id"]
+
+        if participant_id not in predicted_match_ids_by_participant:
+            predicted_match_ids_by_participant[participant_id] = set()
+
+        predicted_match_ids_by_participant[participant_id].add(match_id)
+
+        updated_at = prediction.get("updated_at")
+
+        if updated_at:
+            current_latest = latest_update_by_participant.get(participant_id)
+
+            if current_latest is None or updated_at > current_latest:
+                latest_update_by_participant[participant_id] = updated_at
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+        predicted_match_ids = predicted_match_ids_by_participant.get(
+            participant_id,
+            set(),
+        )
+
+        completed_count = len(predicted_match_ids)
+        remaining_count = total_matches - completed_count
+        is_complete = completed_count == total_matches
+
+        latest_update = latest_update_by_participant.get(participant_id)
+
+        rows.append(
+            {
+                "Namn": participant["display_name"],
+                "Status": "Klar ✅" if is_complete else "Ej klar",
+                "Tippade matcher": completed_count,
+                "Saknar": remaining_count,
+                "Totalt": total_matches,
+                "Senast uppdaterad": (
+                    format_datetime_swedish(latest_update)
+                    if latest_update
+                    else "-"
+                ),
+            }
+        )
+
+    completed_participants = sum(
+        1 for row in rows
+        if row["Status"] == "Klar ✅"
+    )
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        st.metric("Deltagare", len(participants))
+
+    with col2:
+        st.metric("Klara", completed_participants)
+
+    with col3:
+        st.metric("Matcher", total_matches)
+
+    status_df = pd.DataFrame(rows)
+
+    # Visa de som inte är klara överst.
+    status_df = status_df.sort_values(
+        by=["Saknar", "Namn"],
+        ascending=[False, True],
+    )
+
+    st.dataframe(
+        status_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.caption(
+        "En deltagare räknas som klar när alla matcher har både 1/X/2 "
+        "och över/under 2,5 mål sparade."
+    )
+
 
 # ------------------------------------------------------------
 # Adminsida
@@ -628,6 +741,7 @@ def render_admin_page() -> None:
         st.rerun()
 
     render_deadline_admin_section()
+    render_participant_status_admin_section()
     render_match_import_admin_section()
     render_results_admin_section()
     render_leaderboard_section()
