@@ -67,6 +67,7 @@ from src.scoring import (
     is_finished_match,
 )
 
+from src.group_tables import build_group_tables
 
 # ------------------------------------------------------------
 # Sidinställningar
@@ -999,6 +1000,8 @@ def render_admin_page() -> None:
     with tab_matches:
         render_match_import_admin_section()
 
+        render_group_tables_section()
+
         st.header("Matcher i databasen")
         render_matches_table()
 
@@ -1128,14 +1131,71 @@ def render_matches_table() -> None:
 
 def render_public_matches_results_section() -> None:
     """
-    Visar alla matcher och resultat i ett mer läsbart format.
+    Visar matcher, resultat och gruppställningar.
 
-    Detta är inte tipsformuläret, utan en ren översikt:
-    - schema före match
-    - resultat efter att admin fyllt i resultat
+    Detta är en översiktssida för deltagaren:
+    - gruppställningar
+    - schema/resultat
     """
 
-    st.header("Matcher & resultat")
+    tab_groups, tab_matches = st.tabs(
+        [
+            "🏆 Grupper",
+            "📅 Matcher",
+        ]
+    )
+
+    with tab_groups:
+        render_group_tables_section()
+
+    with tab_matches:
+        st.header("Matcher & resultat")
+
+        matches = get_matches()
+
+        if not matches:
+            st.warning("Inga matcher hittades i databasen.")
+            return
+
+        last_date_heading = None
+
+        for match in matches:
+            date_heading = format_date_swedish(match["kickoff_at"])
+
+            if date_heading != last_date_heading:
+                st.markdown(f"### {date_heading}")
+                last_date_heading = date_heading
+
+            with st.container(border=True):
+                st.markdown(
+                    f"**Match {match['match_no']} · Grupp {match['group_name']}**"
+                )
+
+                st.markdown(
+                    f"### {match['home_team']} – {match['away_team']}"
+                )
+
+                st.caption(
+                    f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
+                )
+
+                if is_finished_match(match):
+                    st.success(
+                        f"Resultat: {match['home_team']} "
+                        f"{match['home_goals']}–{match['away_goals']} "
+                        f"{match['away_team']}"
+                    )
+                else:
+                    st.info("Resultat: ej ifyllt ännu")
+
+def render_group_tables_section() -> None:
+    """
+    Visar gruppställningar baserat på inmatade resultat.
+
+    Tabellen uppdateras automatiskt när admin fyller i matchresultat.
+    """
+
+    st.header("Grupper")
 
     matches = get_matches()
 
@@ -1143,36 +1203,41 @@ def render_public_matches_results_section() -> None:
         st.warning("Inga matcher hittades i databasen.")
         return
 
-    last_date_heading = None
+    group_tables = build_group_tables(matches)
 
-    for match in matches:
-        date_heading = format_date_swedish(match["kickoff_at"])
+    if not group_tables:
+        st.info("Inga grupper hittades.")
+        return
 
-        if date_heading != last_date_heading:
-            st.markdown(f"### {date_heading}")
-            last_date_heading = date_heading
+    for group_name, rows in group_tables.items():
+        st.subheader(f"Grupp {group_name}")
 
-        with st.container(border=True):
-            st.markdown(
-                f"**Match {match['match_no']} · Grupp {match['group_name']}**"
-            )
+        group_df = pd.DataFrame(rows)
 
-            st.markdown(
-                f"### {match['home_team']} – {match['away_team']}"
-            )
+        visible_columns = [
+            "Lag",
+            "M",
+            "V",
+            "O",
+            "F",
+            "GM",
+            "IM",
+            "MS",
+            "P",
+        ]
 
-            st.caption(
-                f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
-            )
+        group_df = group_df[visible_columns]
 
-            if is_finished_match(match):
-                st.success(
-                    f"Resultat: {match['home_team']} "
-                    f"{match['home_goals']}–{match['away_goals']} "
-                    f"{match['away_team']}"
-                )
-            else:
-                st.info("Resultat: ej ifyllt ännu")
+        st.dataframe(
+            group_df,
+            width="stretch",
+            hide_index=True,
+        )
+
+    st.caption(
+        "Tabellen sorteras efter poäng, målskillnad, gjorda mål och lagnamn. "
+        "Fullständig officiell tiebreaker-logik kan läggas till senare."
+    )
 
 def render_predictions_form(
     participant: dict,
