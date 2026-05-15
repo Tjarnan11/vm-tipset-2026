@@ -602,6 +602,144 @@ def render_leaderboard_section() -> None:
         "Poäng: 1 poäng för rätt 1/X/2 och 1 poäng för rätt över/under 2,5 mål."
     )
 
+def render_public_predictions_overview_section() -> None:
+    """
+    Visar allas tips efter deadline.
+
+    Deltagaren kan välja en match och se:
+    - varje deltagares 1/X/2-tips
+    - varje deltagares över/under-tips
+    - poäng på matchen om resultat finns
+
+    Den här funktionen ska bara visas efter deadline.
+    """
+
+    st.header("Allas tips")
+
+    participants = get_active_participants()
+    matches = get_matches()
+    predictions = get_all_predictions()
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    if not matches:
+        st.warning("Inga matcher hittades.")
+        return
+
+    predictions_by_participant_and_match = {
+        (prediction["participant_id"], prediction["match_id"]): prediction
+        for prediction in predictions
+    }
+
+    match_label_by_id = {}
+
+    for match in matches:
+        result_text = ""
+
+        if is_finished_match(match):
+            result_text = f" ({match['home_goals']}–{match['away_goals']})"
+
+        label = (
+            f"Match {match['match_no']} – "
+            f"{format_datetime_swedish(match['kickoff_at'])} – "
+            f"{match['home_team']} vs {match['away_team']}"
+            f"{result_text}"
+        )
+
+        match_label_by_id[match["id"]] = label
+
+    selected_match_id = st.selectbox(
+        "Välj match",
+        options=list(match_label_by_id.keys()),
+        format_func=lambda match_id: match_label_by_id[match_id],
+        key="public_predictions_match_select",
+    )
+
+    selected_match = next(
+        match for match in matches
+        if match["id"] == selected_match_id
+    )
+
+    st.subheader(
+        f"{selected_match['home_team']} – {selected_match['away_team']}"
+    )
+
+    st.caption(
+        f"Match {selected_match['match_no']} · "
+        f"Grupp {selected_match['group_name']} · "
+        f"Avspark: {format_datetime_swedish(selected_match['kickoff_at'])} svensk tid"
+    )
+
+    if is_finished_match(selected_match):
+        home_goals = int(selected_match["home_goals"])
+        away_goals = int(selected_match["away_goals"])
+
+        correct_outcome = get_match_outcome(home_goals, away_goals)
+        correct_goals_pick = get_goals_pick(home_goals, away_goals)
+
+        st.success(
+            f"Resultat: {selected_match['home_team']} "
+            f"{home_goals}–{away_goals} "
+            f"{selected_match['away_team']}"
+        )
+
+        st.caption(
+            f"Rätt rad: {correct_outcome} · "
+            f"{format_goals_pick_label(correct_goals_pick)}"
+        )
+    else:
+        st.info("Resultat är inte ifyllt ännu.")
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+
+        prediction = predictions_by_participant_and_match.get(
+            (participant_id, selected_match_id)
+        )
+
+        if prediction:
+            outcome_pick = prediction["outcome_pick"]
+            goals_pick = format_goals_pick_label(prediction["goals_pick"])
+
+            if is_finished_match(selected_match):
+                score = calculate_prediction_points(
+                    prediction=prediction,
+                    match=selected_match,
+                )
+
+                points = str(score["points"])
+            else:
+                points = "-"
+        else:
+            outcome_pick = "-"
+            goals_pick = "-"
+
+            if is_finished_match(selected_match):
+                points = "0"
+            else:
+                points = "-"
+
+            rows.append(
+                {
+                    "Namn": participant["display_name"],
+                    "1/X/2": outcome_pick,
+                    "Över/under": goals_pick,
+                    "Poäng": points,
+                }
+            )
+
+    predictions_df = pd.DataFrame(rows)
+
+    st.dataframe(
+        predictions_df,
+        width="stretch",
+        hide_index=True,
+    )
+
 def render_rules_section() -> None:
     """
     Visar reglerna för VM-tipset.
@@ -1041,10 +1179,11 @@ def render_participant_page(token: str) -> None:
     deadline_value = get_group_stage_deadline()
     predictions_locked = is_deadline_passed(deadline_value)
 
-    tab_tips, tab_leaderboard, tab_matches, tab_rules = st.tabs(
+    tab_tips, tab_leaderboard, tab_predictions, tab_matches, tab_rules = st.tabs(
         [
             "📝 Mina tips",
             "📊 Poängtabell",
+            "🧾 Allas tips",
             "📅 Matcher & resultat",
             "ℹ️ Regler",
         ]
@@ -1067,8 +1206,16 @@ def render_participant_page(token: str) -> None:
         else:
             st.info("Poängtabellen visas efter deadline.")
 
+    with tab_predictions:
+        if predictions_locked:
+            render_public_predictions_overview_section()
+        else:
+            st.info("Allas tips visas efter deadline.")
+
     with tab_matches:
-        render_public_matches_results_section()
+        render_public_matches_results_section(
+            predictions_locked=predictions_locked,
+        )
 
     with tab_rules:
         render_rules_section()
@@ -1129,7 +1276,9 @@ def render_matches_table() -> None:
 
     st.dataframe(matches_df, width="stretch")
 
-def render_public_matches_results_section() -> None:
+def render_public_matches_results_section(
+    predictions_locked: bool,
+) -> None:
     """
     Visar matcher, resultat och gruppställningar.
 
@@ -1156,6 +1305,14 @@ def render_public_matches_results_section() -> None:
         if not matches:
             st.warning("Inga matcher hittades i databasen.")
             return
+        
+        participants = get_active_participants() if predictions_locked else []
+        predictions = get_all_predictions() if predictions_locked else []
+
+        predictions_by_participant_and_match = {
+            (prediction["participant_id"], prediction["match_id"]): prediction
+            for prediction in predictions
+        }
 
         last_date_heading = None
 
@@ -1185,8 +1342,94 @@ def render_public_matches_results_section() -> None:
                         f"{match['home_goals']}–{match['away_goals']} "
                         f"{match['away_team']}"
                     )
+
+                    if predictions_locked:
+                        rows = []
+
+                        for participant in participants:
+                            participant_id = participant["id"]
+
+                            prediction = predictions_by_participant_and_match.get(
+                                (participant_id, match["id"])
+                            )
+
+                            if prediction:
+                                score = calculate_prediction_points(
+                                    prediction=prediction,
+                                    match=match,
+                                )
+
+                                outcome_pick = prediction["outcome_pick"]
+                                goals_pick = format_goals_pick_label(
+                                    prediction["goals_pick"]
+                                )
+                                points = score["points"]
+                            else:
+                                outcome_pick = "-"
+                                goals_pick = "-"
+                                points = 0
+
+                            rows.append(
+                                {
+                                    "Namn": participant["display_name"],
+                                    "1/X/2": outcome_pick,
+                                    "Över/under": goals_pick,
+                                    "Poäng": points,
+                                }
+                            )
+
+                        points_df = pd.DataFrame(rows)
+
+                        points_df = points_df.sort_values(
+                            by=["Poäng", "Namn"],
+                            ascending=[False, True],
+                        )
+
+                        with st.expander("Tips och poäng på denna match"):
+                            st.dataframe(
+                                points_df,
+                                width="stretch",
+                                hide_index=True,
+                            )
+
                 else:
                     st.info("Resultat: ej ifyllt ännu")
+
+                    if predictions_locked:
+                        rows = []
+
+                        for participant in participants:
+                            participant_id = participant["id"]
+
+                            prediction = predictions_by_participant_and_match.get(
+                                (participant_id, match["id"])
+                            )
+
+                            if prediction:
+                                outcome_pick = prediction["outcome_pick"]
+                                goals_pick = format_goals_pick_label(
+                                    prediction["goals_pick"]
+                                )
+                            else:
+                                outcome_pick = "-"
+                                goals_pick = "-"
+
+                            rows.append(
+                                {
+                                    "Namn": participant["display_name"],
+                                    "1/X/2": outcome_pick,
+                                    "Över/under": goals_pick,
+                                }
+                            )
+
+                        tips_df = pd.DataFrame(rows)
+
+                        with st.expander("Tips på denna match"):
+                            st.dataframe(
+                                tips_df,
+                                width="stretch",
+                                hide_index=True,
+                            )
 
 def render_group_tables_section() -> None:
     """
