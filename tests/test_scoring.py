@@ -5,6 +5,8 @@ from src.scoring import (
     is_finished_match,
 )
 
+from src.scoring import build_leaderboard
+
 
 def test_get_match_outcome_home_win():
     assert get_match_outcome(2, 1) == "1"
@@ -98,3 +100,59 @@ def test_calculate_prediction_points_zero_points():
     assert score["points"] == 0
     assert score["outcome_points"] == 0
     assert score["goals_points"] == 0
+
+    
+
+
+
+
+def test_build_leaderboard_shared_placement_when_fully_tied():
+    participants = [
+        {"id": "p1", "display_name": "Anna"},
+        {"id": "p2", "display_name": "Erik"},
+        {"id": "p3", "display_name": "Jocke"},
+    ]
+
+    matches = [
+        {
+            "id": "m1",
+            "status": "finished",
+            "home_goals": 2,
+            "away_goals": 1,
+        }
+    ]
+
+    predictions = [
+        {
+            "participant_id": "p1",
+            "match_id": "m1",
+            "outcome_pick": "1",
+            "goals_pick": "over",
+        },
+        {
+            "participant_id": "p2",
+            "match_id": "m1",
+            "outcome_pick": "1",
+            "goals_pick": "over",
+        },
+        {
+            "participant_id": "p3",
+            "match_id": "m1",
+            "outcome_pick": "X",
+            "goals_pick": "over",
+        },
+    ]
+
+    leaderboard = build_leaderboard(
+        participants=participants,
+        matches=matches,
+        predictions=predictions,
+    )
+
+    anna = next(row for row in leaderboard if row["Namn"] == "Anna")
+    erik = next(row for row in leaderboard if row["Namn"] == "Erik")
+    jocke = next(row for row in leaderboard if row["Namn"] == "Jocke")
+
+    assert anna["Placering"] == 1
+    assert erik["Placering"] == 1
+    assert jocke["Placering"] == 3

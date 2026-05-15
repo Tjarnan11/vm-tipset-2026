@@ -183,23 +183,45 @@ def build_leaderboard(
     leaderboard = list(leaderboard_by_participant_id.values())
 
     # Sortering:
-    # 1. Högst poäng
-    # 2. Flest rätt 1X2
-    # 3. Flest rätt över/under
-    # 4. Namn alfabetiskt
+    # 1. Totalpoäng
+    # 2. Bonusmål från vald utslagsfråga-spelare
+    # 3. Flest rätt 1X2
+    # 4. Namn alfabetiskt, endast för stabil visning inom samma placering
     leaderboard.sort(
         key=lambda row: (
             -row["Poäng"],
             -row["Bonusmål"],
             -row["Rätt 1X2"],
-            -row["Rätt Ö/U"],
             row["Namn"].lower(),
         )
     )
 
-    # Lägg till placering.
-    # För MVP kör vi enkel 1, 2, 3-ranking även om två är exakt lika.
+    # Placering med delade platser.
+    # Exempel:
+    # 1, 2, 2, 4
+    #
+    # Två deltagare delar placering om de är lika på:
+    # - totalpoäng
+    # - bonusmål
+    # - rätt 1X2
+    #
+    # Rätt Ö/U används inte som separat utslag här eftersom:
+    # om totalpoäng och rätt 1X2 är samma, då är rätt Ö/U automatiskt samma.
+    previous_tiebreak_key = None
+    previous_placement = 0
+
     for index, row in enumerate(leaderboard, start=1):
-        row["Placering"] = index
+        current_tiebreak_key = (
+            row["Poäng"],
+            row["Bonusmål"],
+            row["Rätt 1X2"],
+        )
+
+        if current_tiebreak_key == previous_tiebreak_key:
+            row["Placering"] = previous_placement
+        else:
+            row["Placering"] = index
+            previous_placement = index
+            previous_tiebreak_key = current_tiebreak_key
 
     return leaderboard

@@ -927,8 +927,40 @@ def render_rules_section() -> None:
         1. Totalpoäng
         2. Flest mål av vald utslagsfråga-spelare
         3. Flest rätt 1/X/2
-        4. Flest rätt över/under 2,5 mål
-        5. Namn i alfabetisk ordning
+        4. Delad placering om deltagarna fortfarande är lika
+
+        Om deltagare fortfarande är lika efter dessa steg får de samma placering.
+        """
+    )
+
+    st.subheader("Prispott")
+
+    st.markdown(
+        """
+        Om tävlingen spelas med insats gäller följande princip:
+
+        - Om en deltagare är ensam 1:a får vinnaren prispotten minus en insats.
+        - Den som är ensam 2:a får tillbaka en insats.
+        - Om flera deltagare delar 1:a plats delar de på hela prispotten.
+        - Om en deltagare är ensam 1:a men flera deltagare delar 2:a plats, delar 2:orna på en insats.
+
+        Exempel:
+
+        Om 10 deltagare betalar 100 kr var är prispotten 1000 kr.
+
+        - Ensam 1:a och ensam 2:a
+            - 1:a får 900 kr
+            - 2:a får 100 kr
+            
+
+        - Två deltagare delar 1:a
+            -  de delar på hela prispotten, 500 kr var
+            - ingen separat 2:a-pris delas ut
+
+
+        - Ensam 1:a och två deltagare delar 2:a
+            - 1:a får 900 kr
+            - 2:orna får 50 kr var
         """
     )
 
