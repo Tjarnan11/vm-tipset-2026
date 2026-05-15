@@ -31,7 +31,9 @@ from src.deadline import (
     build_deadline_iso_from_swedish_time,
     format_deadline_swedish,
     is_deadline_passed,
+    parse_deadline,
 )
+
 from src.repositories.settings_repo import (
     get_group_stage_deadline,
     set_group_stage_deadline,
@@ -210,6 +212,27 @@ def render_admin_login() -> bool:
 
     st.error("Fel adminlösenord.")
     return False
+
+def render_check_item(
+    label: str,
+    passed: bool,
+    success_text: str,
+    warning_text: str,
+) -> None:
+    """
+    Visar en rad i adminens launch-checklista.
+
+    passed=True  -> grön check
+    passed=False -> gul varning
+
+    Detta är bara en visuell hjälp för admin.
+    Den ändrar ingen data.
+    """
+
+    if passed:
+        st.success(f"✅ {label}: {success_text}")
+    else:
+        st.warning(f"⚠️ {label}: {warning_text}")
 
 # ------------------------------------------------------------
 # Startsida
@@ -1054,6 +1077,89 @@ def render_admin_overview_section() -> None:
         f"{format_deadline_swedish(deadline_value)} svensk tid"
     )
 
+def render_launch_checklist_section() -> None:
+    """
+    Visar en icke-destruktiv checklista inför launch.
+
+    Syftet är att snabbt se om appen verkar redo att skickas till riktiga
+    deltagare. Den här funktionen rensar eller ändrar ingen data.
+    """
+
+    st.header("Launch-checklista")
+
+    participants = get_active_participants()
+    matches = get_matches()
+    deadline_value = get_group_stage_deadline()
+
+    total_matches = len(matches)
+
+    finished_matches = [
+        match for match in matches
+        if is_finished_match(match)
+    ]
+
+    participants_without_link = [
+        participant for participant in participants
+        if not participant.get("private_token")
+    ]
+
+    base_url = st.secrets["app"].get("base_url", "")
+
+    deadline = parse_deadline(deadline_value)
+    deadline_is_set = deadline is not None
+    deadline_has_passed = is_deadline_passed(deadline_value)
+
+    render_check_item(
+        label="Matcher",
+        passed=total_matches == 72,
+        success_text="72 matcher finns i databasen.",
+        warning_text=f"{total_matches} matcher finns i databasen. Gruppspelet bör ha 72.",
+    )
+
+    render_check_item(
+        label="Deadline",
+        passed=deadline_is_set,
+        success_text=f"Deadline är satt till {format_deadline_swedish(deadline_value)} svensk tid.",
+        warning_text="Ingen deadline är satt.",
+    )
+
+    if deadline_is_set:
+        render_check_item(
+            label="Deadline i framtiden",
+            passed=not deadline_has_passed,
+            success_text="Deadline ligger i framtiden.",
+            warning_text="Deadline har redan passerat. Tips är låsta.",
+        )
+
+    render_check_item(
+        label="Deltagarlänkar",
+        passed=len(participants_without_link) == 0,
+        success_text="Alla aktiva deltagare har sparad privat länk.",
+        warning_text=f"{len(participants_without_link)} aktiv(a) deltagare saknar sparad länk.",
+    )
+
+    render_check_item(
+        label="Base URL",
+        passed=bool(base_url) and "localhost" not in base_url,
+        success_text=f"Base URL ser ut att vara deployad: {base_url}",
+        warning_text=f"Base URL verkar vara lokal eller saknas: {base_url}",
+    )
+
+    render_check_item(
+        label="Testresultat",
+        passed=len(finished_matches) == 0,
+        success_text="Inga matchresultat är ifyllda.",
+        warning_text=f"{len(finished_matches)} match(er) har resultat. Rensa testresultat inför riktig launch.",
+    )
+
+    if participants:
+        st.info(
+            f"Det finns {len(participants)} aktiv(a) deltagare. "
+            "Inför riktig launch bör detta motsvara de personer du faktiskt vill bjuda in."
+        )
+    else:
+        st.info("Det finns inga aktiva deltagare ännu.")
+
 
 def render_create_participant_admin_section() -> None:
     """
@@ -1128,6 +1234,7 @@ def render_admin_page() -> None:
 
     with tab_overview:
         render_admin_overview_section()
+        render_launch_checklist_section()
         render_deadline_admin_section()
 
     with tab_participants:
