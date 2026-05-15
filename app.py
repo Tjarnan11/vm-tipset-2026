@@ -234,6 +234,16 @@ def render_check_item(
     else:
         st.warning(f"⚠️ {label}: {warning_text}")
 
+def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
+    """
+    Gör om en DataFrame till CSV-bytes för st.download_button.
+
+    Vi använder utf-8-sig för att svenska tecken ska öppnas snyggare
+    i Excel på vissa datorer.
+    """
+
+    return df.to_csv(index=False).encode("utf-8-sig")
+
 # ------------------------------------------------------------
 # Startsida
 # ------------------------------------------------------------
@@ -1222,13 +1232,21 @@ def render_admin_page() -> None:
         st.session_state["admin_logged_in"] = False
         st.rerun()
 
-    tab_overview, tab_participants, tab_matches, tab_results, tab_leaderboard = st.tabs(
+    (
+        tab_overview,
+        tab_participants,
+        tab_matches,
+        tab_results,
+        tab_leaderboard,
+        tab_export,
+    ) = st.tabs(
         [
             "🏠 Översikt",
             "👥 Deltagare & länkar",
             "📅 Matcher",
             "✍️ Resultat",
             "📊 Poängtabell",
+            "⬇️ Export",
         ]
     )
 
@@ -1255,6 +1273,214 @@ def render_admin_page() -> None:
 
     with tab_leaderboard:
         render_leaderboard_section()
+
+    with tab_export:
+        render_admin_export_section()
+
+def render_admin_export_section() -> None:
+    """
+    Adminsektion för att exportera viktig tävlingsdata.
+
+    Exporterna är användbara som backup och för kontroll i Excel/Google Sheets.
+    """
+
+    st.header("Export / backup")
+
+    participants = get_active_participants()
+    matches = get_matches()
+    predictions = get_all_predictions()
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    if not matches:
+        st.warning("Inga matcher finns i databasen.")
+        return
+
+    # ------------------------------------------------------------
+    # Export 1: Poängtabell
+    # ------------------------------------------------------------
+
+    leaderboard = build_leaderboard(
+        participants=participants,
+        matches=matches,
+        predictions=predictions,
+    )
+
+    leaderboard_df = pd.DataFrame(leaderboard)
+
+    if not leaderboard_df.empty:
+        leaderboard_columns = [
+            "Placering",
+            "Namn",
+            "Poäng",
+            "Rätt 1X2",
+            "Rätt Ö/U",
+            "Räknade matcher",
+            "Maxpoäng just nu",
+        ]
+
+        leaderboard_df = leaderboard_df[leaderboard_columns]
+
+        st.subheader("Poängtabell")
+
+        st.download_button(
+            label="Ladda ner poängtabell CSV",
+            data=dataframe_to_csv_bytes(leaderboard_df),
+            file_name="vm_tipset_2026_poangtabell.csv",
+            mime="text/csv",
+        )
+    else:
+        st.info("Poängtabell kan inte exporteras ännu.")
+
+    # ------------------------------------------------------------
+    # Export 2: Matcher och resultat
+    # ------------------------------------------------------------
+
+    matches_rows = []
+
+    for match in matches:
+        matches_rows.append(
+            {
+                "Match": match["match_no"],
+                "Grupp": match["group_name"],
+                "Avspark": format_datetime_swedish(match["kickoff_at"]),
+                "Hemmalag": match["home_team"],
+                "Bortalag": match["away_team"],
+                "Hem": match["home_goals"],
+                "Borta": match["away_goals"],
+                "Status": match["status"],
+            }
+        )
+
+    matches_df = pd.DataFrame(matches_rows)
+
+    st.subheader("Matcher och resultat")
+
+    st.download_button(
+        label="Ladda ner matcher/resultat CSV",
+        data=dataframe_to_csv_bytes(matches_df),
+        file_name="vm_tipset_2026_matcher_resultat.csv",
+        mime="text/csv",
+    )
+
+    # ------------------------------------------------------------
+    # Export 3: Alla tips i långformat
+    # ------------------------------------------------------------
+
+    participant_name_by_id = {
+        participant["id"]: participant["display_name"]
+        for participant in participants
+    }
+
+    match_by_id = {
+        match["id"]: match
+        for match in matches
+    }
+
+    prediction_rows = []
+
+    for prediction in predictions:
+        participant_id = prediction["participant_id"]
+        match_id = prediction["match_id"]
+
+        participant_name = participant_name_by_id.get(
+            participant_id,
+            "Okänd deltagare",
+        )
+
+        match = match_by_id.get(match_id)
+
+        if match is None:
+            continue
+
+        prediction_rows.append(
+            {
+                "Deltagare": participant_name,
+                "Match": match["match_no"],
+                "Grupp": match["group_name"],
+                "Avspark": format_datetime_swedish(match["kickoff_at"]),
+                "Hemmalag": match["home_team"],
+                "Bortalag": match["away_team"],
+                "Tips 1X2": prediction["outcome_pick"],
+                "Tips över/under": format_goals_pick_label(
+                    prediction["goals_pick"]
+                ),
+                "Senast uppdaterad": format_datetime_swedish(
+                    prediction.get("updated_at")
+                ),
+            }
+        )
+
+    predictions_df = pd.DataFrame(prediction_rows)
+
+    st.subheader("Alla tips")
+
+    if predictions_df.empty:
+        st.info("Inga tips finns att exportera ännu.")
+    else:
+        predictions_df = predictions_df.sort_values(
+            by=["Deltagare", "Match"],
+            ascending=[True, True],
+        )
+
+        st.download_button(
+            label="Ladda ner alla tips CSV",
+            data=dataframe_to_csv_bytes(predictions_df),
+            file_name="vm_tipset_2026_alla_tips.csv",
+            mime="text/csv",
+        )
+
+    # ------------------------------------------------------------
+    # Export 4: Deltagarstatus
+    # ------------------------------------------------------------
+
+    total_matches = len(matches)
+
+    predicted_match_ids_by_participant = {}
+
+    for prediction in predictions:
+        participant_id = prediction["participant_id"]
+        match_id = prediction["match_id"]
+
+        if participant_id not in predicted_match_ids_by_participant:
+            predicted_match_ids_by_participant[participant_id] = set()
+
+        predicted_match_ids_by_participant[participant_id].add(match_id)
+
+    status_rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+        predicted_match_ids = predicted_match_ids_by_participant.get(
+            participant_id,
+            set(),
+        )
+
+        completed_count = len(predicted_match_ids)
+
+        status_rows.append(
+            {
+                "Namn": participant["display_name"],
+                "Tippade matcher": completed_count,
+                "Saknar": total_matches - completed_count,
+                "Totalt": total_matches,
+                "Klar": "Ja" if completed_count == total_matches else "Nej",
+            }
+        )
+
+    status_df = pd.DataFrame(status_rows)
+
+    st.subheader("Deltagarstatus")
+
+    st.download_button(
+        label="Ladda ner deltagarstatus CSV",
+        data=dataframe_to_csv_bytes(status_df),
+        file_name="vm_tipset_2026_deltagarstatus.csv",
+        mime="text/csv",
+    )
+
 
 # ------------------------------------------------------------
 # Deltagarsida
