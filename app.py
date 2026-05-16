@@ -1196,6 +1196,24 @@ def render_participant_links_admin_section() -> None:
         else:
             st.error("Kunde inte generera ny länk.")
 
+def format_match_result_text(match: dict) -> str:
+    """
+    Returnerar en kort resultattext för en match.
+
+    Om resultat finns:
+        Mexiko 3–1 Sydafrika
+
+    Annars:
+        Mexiko – Sydafrika
+    """
+
+    if is_finished_match(match):
+        return (
+            f"{match['home_team']} {match['home_goals']}–"
+            f"{match['away_goals']} {match['away_team']}"
+        )
+
+    return f"{match['home_team']} – {match['away_team']}"
 
 # ------------------------------------------------------------
 # Adminsida
@@ -2281,15 +2299,19 @@ def render_predictions_form(
     with st.form("predictions_form", border=False):
         st.subheader("Dina tips")
 
-        submitted_top = st.form_submit_button(
-            "Spara ändringar",
-            disabled=predictions_locked,
-            key="save_predictions_top",
-        )
+        submitted_top = False
 
-        st.caption(
-            "Tipsen sparas först när du trycker på Spara ändringar."
-        )
+        if not predictions_locked:
+            submitted_top = st.form_submit_button(
+                "Spara ändringar",
+                key="save_predictions_top",
+            )
+
+            st.caption(
+                "Tipsen sparas först när du trycker på Spara ändringar."
+            )
+
+    
 
         last_date_heading = None
 
@@ -2304,6 +2326,13 @@ def render_predictions_form(
                 last_date_heading = date_heading
 
             with st.container(border=True):
+                if predictions_locked:
+                    render_locked_prediction_card(
+                        match=match,
+                        existing_prediction=existing,
+                    )
+                    continue
+
                 st.markdown(
                     f"**Match {match['match_no']} · Grupp {match['group_name']}**"
                 )
@@ -2315,46 +2344,6 @@ def render_predictions_form(
                 st.caption(
                     f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
                 )
-
-                # Efter deadline visar vi resultat och spelarens poäng per match.
-                # Före deadline ska deltagaren bara fokusera på att lägga sina tips.
-                if predictions_locked:
-                    if is_finished_match(match):
-                        home_goals = int(match["home_goals"])
-                        away_goals = int(match["away_goals"])
-
-                        correct_outcome = get_match_outcome(home_goals, away_goals)
-                        correct_goals_pick = get_goals_pick(home_goals, away_goals)
-
-                        st.markdown(
-                            f"**Resultat:** "
-                            f"{match['home_team']} {home_goals}–{away_goals} {match['away_team']}"
-                        )
-
-                        st.caption(
-                            f"Rätt rad: {correct_outcome} · "
-                            f"{format_goals_pick_label(correct_goals_pick)}"
-                        )
-
-                        if existing:
-                            score = calculate_prediction_points(
-                                prediction=existing,
-                                match=match,
-                            )
-
-                            st.markdown(
-                                f"**Din poäng på matchen:** "
-                                f"{score['points']}/2 "
-                                f"({score['outcome_points']}p 1X2, "
-                                f"{score['goals_points']}p Ö/U)"
-                            )
-                        else:
-                            st.markdown(
-                                "**Din poäng på matchen:** 0/2 "
-                                "(inget sparat tips)"
-                            )
-                    else:
-                        st.caption("Resultat: ej spelad eller ej ifylld ännu.")
 
                 # Förifyll 1/X/2 om deltagaren redan har tippat matchen.
                 existing_outcome = existing["outcome_pick"] if existing else "Välj"
@@ -2369,7 +2358,6 @@ def render_predictions_form(
                     options=outcome_options,
                     index=outcome_index,
                     key=f"outcome_{match_id}",
-                    disabled=predictions_locked,
                 )
 
                 # Förifyll över/under om deltagaren redan har tippat matchen.
@@ -2387,7 +2375,6 @@ def render_predictions_form(
                     options=goals_options,
                     index=goals_index,
                     key=f"goals_{match_id}",
-                    disabled=predictions_locked,
                 )
 
                 goals_pick = goals_label_to_value[goals_label]
@@ -2416,11 +2403,13 @@ def render_predictions_form(
             # Lite luft mellan korten.
             st.write("")
 
-        submitted_bottom = st.form_submit_button(
-            "Spara ändringar",
-            disabled=predictions_locked,
-            key="save_predictions_bottom",
-        )   
+        submitted_bottom = False
+
+        if not predictions_locked:
+            submitted_bottom = st.form_submit_button(
+                "Spara ändringar",
+                key="save_predictions_bottom",
+            ) 
 
     submitted = submitted_top or submitted_bottom
 
@@ -2480,7 +2469,71 @@ def render_predictions_form(
         st.toast(save_message, icon="✅")
         st.success(save_message)
 
+def render_locked_prediction_card(
+    match: dict,
+    existing_prediction: dict | None,
+) -> None:
+    """
+    Visar ett kompakt read-only-kort efter deadline.
 
+    När deadline har passerat ska deltagaren inte se disabled dropdowns.
+    I stället visar vi:
+    - resultat om det finns
+    - deltagarens tips
+    - rätt rad
+    - poäng på matchen
+    """
+
+    st.markdown(
+        f"**Match {match['match_no']} · Grupp {match['group_name']} · "
+        f"{format_datetime_swedish(match['kickoff_at'])}**"
+    )
+
+    st.markdown(
+        f"### {format_match_result_text(match)}"
+    )
+
+    if existing_prediction is None:
+        st.warning("Du har inget sparat tips på denna match.")
+        return
+
+    user_outcome = existing_prediction["outcome_pick"]
+    user_goals = format_goals_pick_label(existing_prediction["goals_pick"])
+
+    st.markdown(
+        f"**Ditt tips:** {user_outcome} · {user_goals}"
+    )
+
+    if not is_finished_match(match):
+        st.info("Resultat är inte ifyllt ännu.")
+        return
+
+    home_goals = int(match["home_goals"])
+    away_goals = int(match["away_goals"])
+
+    correct_outcome = get_match_outcome(home_goals, away_goals)
+    correct_goals_pick = get_goals_pick(home_goals, away_goals)
+
+    score = calculate_prediction_points(
+        prediction=existing_prediction,
+        match=match,
+    )
+
+    st.markdown(
+        f"**Rätt rad:** {correct_outcome} · "
+        f"{format_goals_pick_label(correct_goals_pick)}"
+    )
+
+    st.markdown("**Poäng**")
+
+    st.markdown(
+        f"## {score['points']}/2"
+    )
+
+    st.caption(
+        f"{score['outcome_points']}p för 1X2 · "
+        f"{score['goals_points']}p för över/under"
+    )
 # ------------------------------------------------------------
 # Tillfälligt utvecklingstest: exempelmatcher
 # ------------------------------------------------------------
