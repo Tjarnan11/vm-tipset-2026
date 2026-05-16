@@ -720,7 +720,9 @@ def render_public_predictions_overview_section() -> None:
         f"Avspark: {format_datetime_swedish(selected_match['kickoff_at'])} svensk tid"
     )
 
-    if is_finished_match(selected_match):
+    selected_match_is_finished = is_finished_match(selected_match)
+
+    if selected_match_is_finished:
         home_goals = int(selected_match["home_goals"])
         away_goals = int(selected_match["away_goals"])
 
@@ -753,7 +755,7 @@ def render_public_predictions_overview_section() -> None:
             outcome_pick = prediction["outcome_pick"]
             goals_pick = format_goals_pick_label(prediction["goals_pick"])
 
-            if is_finished_match(selected_match):
+            if selected_match_is_finished:
                 score = calculate_prediction_points(
                     prediction=prediction,
                     match=selected_match,
@@ -766,19 +768,22 @@ def render_public_predictions_overview_section() -> None:
             outcome_pick = "-"
             goals_pick = "-"
 
-            if is_finished_match(selected_match):
+            if selected_match_is_finished:
                 points = "0"
             else:
                 points = "-"
 
-            rows.append(
-                {
-                    "Namn": participant["display_name"],
-                    "1/X/2": outcome_pick,
-                    "Över/under": goals_pick,
-                    "Poäng": points,
-                }
-            )
+        # Viktigt:
+        # rows.append ska ligga UTANFÖR if/else ovan.
+        # Annars råkar vi bara visa deltagare som saknar tips.
+        rows.append(
+            {
+                "Namn": participant["display_name"],
+                "1/X/2": outcome_pick,
+                "Över/under": goals_pick,
+                "Poäng": points,
+            }
+        )
 
     predictions_df = pd.DataFrame(rows)
 
