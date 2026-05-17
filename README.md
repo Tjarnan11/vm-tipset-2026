@@ -1,14 +1,47 @@
 # VM-tipset 2026
 
-En privat webbaserad MVP för gruppspelstips under VM 2026.
+En privat webbaserad app för VM-tipset 2026.
 
-## MVP-scope
+Appen är byggd som ett kompisprojekt där deltagare får privata länkar, lägger sina tips via mobil/webb och där admin kan hantera matcher, resultat, deadlines och poängtabeller.
+
+## Nuvarande scope
+
+### Gruppspel
+
+Gruppspelstipset är den första färdiga tävlingsdelen.
 
 - Deltagare får privata länkar
-- Deltagare tippar 1/X/2 och över/under 2,5 mål
+- Deltagare tippar 1/X/2 och över/under 2,5 mål för alla gruppspelsmatcher
+- Deltagare väljer även en utslagsfråga: skyttekung i gruppspelet
 - Tips kan ändras fram till deadline
-- Admin kan lägga in matcher och resultat
+- Efter deadline låses tipsen
+- Efter deadline kan deltagare se allas tips
+- Admin kan importera matcher via CSV
+- Admin kan lägga in matchresultat
 - Poängtabell räknas automatiskt
+- Gruppställningar räknas automatiskt
+- Admin kan exportera data som CSV
+- Appen har launch-checklista inför riktig användning
+
+### Slutspel
+
+Slutspelstipset är planerat som en separat tävlingsdel i samma app.
+
+Planerat upplägg:
+
+- Separat poängtabell för slutspelet
+- Deadlines per slutspelsrunda
+- Admin lägger in faktiska slutspelsmatcher manuellt
+- Deltagare tippar match för match när rundor öppnar
+- Tips kan inkludera exakt resultat, över/under 2,5 mål och första målskytt
+- Finalister och finalvinnare kan tippas före slutspelet
+- Poänglogik och UI byggs i senare steg
+
+Design finns i:
+
+```text
+docs/knockout_design.md
+```
 
 ## Teknik
 
@@ -16,8 +49,7 @@ En privat webbaserad MVP för gruppspelstips under VM 2026.
 - Streamlit
 - Supabase/Postgres
 - GitHub
-
----
+- pytest
 
 ## Launch-checklista
 
