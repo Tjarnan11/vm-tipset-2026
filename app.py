@@ -80,6 +80,12 @@ from src.repositories.bonus_repo import (
 
 from src.group_tables import build_group_tables
 
+from src.ui.common import get_query_param
+from src.ui.start_page import (
+    render_dev_match_preview,
+    render_start_page,
+)
+
 # ------------------------------------------------------------
 # Sidinställningar
 # ------------------------------------------------------------
@@ -95,28 +101,7 @@ st.set_page_config(
 # Hjälpfunktioner för app.py
 # ------------------------------------------------------------
 
-def get_query_param(name: str) -> str | None:
-    """
-    Hämtar en query-parameter från URL:en.
 
-    Exempel:
-        http://localhost:8501?token=abc123
-
-    Då ger:
-        get_query_param("token")
-
-    värdet:
-        "abc123"
-
-    st.query_params är Streamlits sätt att läsa URL-parametrar.
-    """
-
-    value = st.query_params.get(name)
-
-    if value is None:
-        return None
-
-    return str(value)
 
 
 def check_admin_password(password: str) -> bool:
@@ -257,22 +242,6 @@ def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
 # Startsida
 # ------------------------------------------------------------
 
-def render_start_page() -> None:
-    """
-    Visas om användaren inte har admin=1 eller token i URL:en.
-    """
-
-    st.title("⚽ VM-tipset 2026")
-    st.caption("Privat gruppspelstips för kompisgänget")
-
-    st.info(
-        "Det här är en privat app. "
-        "Öppna din personliga länk för att lägga tips."
-    )
-
-    st.write("Admin kan öppna adminläget med:")
-
-    st.code("http://localhost:8501?admin=1")
 
 
 def render_deadline_admin_section() -> None:
@@ -2542,24 +2511,6 @@ def render_locked_prediction_card(
 # ------------------------------------------------------------
 # Tillfälligt utvecklingstest: exempelmatcher
 # ------------------------------------------------------------
-
-def render_dev_match_preview() -> None:
-    """
-    Tillfällig utvecklingsvy som visar CSV-mallen.
-
-    Den här kan vi ta bort eller flytta senare.
-    """
-
-    st.header("Utvecklingstest: exempelmatcher")
-
-    matches_path = Path("data/matches_template.csv")
-
-    if matches_path.exists() and matches_path.stat().st_size > 0:
-        matches = pd.read_csv(matches_path)
-        st.dataframe(matches, width="stretch")
-    else:
-        st.warning("Ingen matchfil hittades ännu eller filen är tom.")
-
 
 # ------------------------------------------------------------
 # App-routing
