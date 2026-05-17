@@ -49,6 +49,7 @@ from src.ui.formatting import (
 )
 from src.ui.leaderboard_page import render_leaderboard_section
 from src.ui.results_page import render_group_tables_section
+from src.ui.knockout_admin import render_knockout_admin_section
 
 
 def check_admin_password(password: str) -> bool:
@@ -872,6 +873,7 @@ def render_admin_page() -> None:
         tab_matches,
         tab_results,
         tab_bonus,
+        tab_knockout,
         tab_leaderboard,
         tab_export,
     ) = st.tabs(
@@ -881,6 +883,7 @@ def render_admin_page() -> None:
             "📅 Matcher",
             "✍️ Resultat",
             "🎯 Bonus",
+            "🏆 Slutspel",
             "📊 Poängtabell",
             "⬇️ Export",
         ]
@@ -909,6 +912,9 @@ def render_admin_page() -> None:
 
     with tab_bonus:
         render_bonus_admin_section()
+
+    with tab_knockout:
+        render_knockout_admin_section()
 
     with tab_leaderboard:
         render_leaderboard_section()
