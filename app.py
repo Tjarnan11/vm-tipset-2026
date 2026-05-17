@@ -85,6 +85,12 @@ from src.ui.start_page import (
     render_dev_match_preview,
     render_start_page,
 )
+from src.ui.formatting import (
+    dataframe_to_csv_bytes,
+    format_goals_pick_label,
+    format_match_result_text,
+    render_check_item,
+)
 
 # ------------------------------------------------------------
 # Sidinställningar
@@ -115,27 +121,6 @@ def check_admin_password(password: str) -> bool:
 
     expected_password = st.secrets["app"]["admin_password"]
     return password == expected_password
-
-def format_goals_pick_label(goals_pick: str | None) -> str:
-    """
-    Gör om databasvärdet för över/under till svensk UI-text.
-
-    Databasen använder:
-        over
-        under
-
-    UI:t visar:
-        Över 2,5 mål
-        Under 2,5 mål
-    """
-
-    if goals_pick == "over":
-        return "Över 2,5 mål"
-
-    if goals_pick == "under":
-        return "Under 2,5 mål"
-
-    return "-"
 
 def check_admin_token(token: str | None) -> bool:
     """
@@ -206,37 +191,6 @@ def render_admin_login() -> bool:
 
     st.error("Fel adminlösenord.")
     return False
-
-def render_check_item(
-    label: str,
-    passed: bool,
-    success_text: str,
-    warning_text: str,
-) -> None:
-    """
-    Visar en rad i adminens launch-checklista.
-
-    passed=True  -> grön check
-    passed=False -> gul varning
-
-    Detta är bara en visuell hjälp för admin.
-    Den ändrar ingen data.
-    """
-
-    if passed:
-        st.success(f"✅ {label}: {success_text}")
-    else:
-        st.warning(f"⚠️ {label}: {warning_text}")
-
-def dataframe_to_csv_bytes(df: pd.DataFrame) -> bytes:
-    """
-    Gör om en DataFrame till CSV-bytes för st.download_button.
-
-    Vi använder utf-8-sig för att svenska tecken ska öppnas snyggare
-    i Excel på vissa datorer.
-    """
-
-    return df.to_csv(index=False).encode("utf-8-sig")
 
 # ------------------------------------------------------------
 # Startsida
@@ -1169,25 +1123,6 @@ def render_participant_links_admin_section() -> None:
             st.info("Ladda om sidan för att se länken i tabellen ovan.")
         else:
             st.error("Kunde inte generera ny länk.")
-
-def format_match_result_text(match: dict) -> str:
-    """
-    Returnerar en kort resultattext för en match.
-
-    Om resultat finns:
-        Mexiko 3–1 Sydafrika
-
-    Annars:
-        Mexiko – Sydafrika
-    """
-
-    if is_finished_match(match):
-        return (
-            f"{match['home_team']} {match['home_goals']}–"
-            f"{match['away_goals']} {match['away_team']}"
-        )
-
-    return f"{match['home_team']} – {match['away_team']}"
 
 # ------------------------------------------------------------
 # Adminsida
