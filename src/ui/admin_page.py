@@ -848,12 +848,12 @@ def render_admin_page() -> None:
     """
     Adminvy för VM-tipset.
 
-    Adminsidan är uppdelad i flikar för att undvika en lång sida:
-    - Översikt
-    - Deltagare & länkar
-    - Matcher
-    - Resultat
-    - Poängtabell
+    Adminsidan använder segmented_control + URL-parametern view.
+
+    Exempel:
+        ?admin=1&view=knockout
+
+    Det gör att vald adminvy kan ligga kvar även efter browser-refresh.
     """
 
     st.title("Admin – VM-tipset 2026")
@@ -867,39 +867,58 @@ def render_admin_page() -> None:
         st.session_state["admin_logged_in"] = False
         st.rerun()
 
-    (
-        tab_overview,
-        tab_participants,
-        tab_matches,
-        tab_results,
-        tab_bonus,
-        tab_knockout,
-        tab_leaderboard,
-        tab_export,
-    ) = st.tabs(
-        [
-            "🏠 Översikt",
-            "👥 Deltagare & länkar",
-            "📅 Matcher",
-            "✍️ Resultat",
-            "🎯 Bonus",
-            "🏆 Slutspel",
-            "📊 Poängtabell",
-            "⬇️ Export",
-        ]
+    admin_sections = {
+        "overview": "🏠 Översikt",
+        "participants": "👥 Deltagare & länkar",
+        "matches": "📅 Matcher",
+        "results": "✍️ Resultat",
+        "bonus": "🎯 Bonus",
+        "knockout": "🏆 Slutspel",
+        "leaderboard": "📊 Poängtabell",
+        "export": "⬇️ Export",
+    }
+
+    # Läs vald vy från URL:en.
+    # Exempel: ?admin=1&view=knockout
+    selected_view_from_url = st.query_params.get("view", "overview")
+
+    if selected_view_from_url not in admin_sections:
+        selected_view_from_url = "overview"
+
+    default_section_label = admin_sections[selected_view_from_url]
+    section_labels = list(admin_sections.values())
+
+    selected_admin_section = st.segmented_control(
+        "Adminvy",
+        options=section_labels,
+        default=default_section_label,
+        key="admin_section",
     )
 
-    with tab_overview:
+    # Översätt tillbaka från label till URL-vänlig nyckel.
+    selected_view_key = next(
+        view_key
+        for view_key, label in admin_sections.items()
+        if label == selected_admin_section
+    )
+
+    # Uppdatera URL:en när användaren byter adminvy.
+    # Då överlever vald vy även en browser-refresh.
+    if st.query_params.get("view") != selected_view_key:
+        st.query_params["admin"] = "1"
+        st.query_params["view"] = selected_view_key
+
+    if selected_view_key == "overview":
         render_admin_overview_section()
         render_launch_checklist_section()
         render_deadline_admin_section()
 
-    with tab_participants:
+    elif selected_view_key == "participants":
         render_create_participant_admin_section()
         render_participant_status_admin_section()
         render_participant_links_admin_section()
 
-    with tab_matches:
+    elif selected_view_key == "matches":
         render_match_import_admin_section()
 
         render_group_tables_section()
@@ -907,19 +926,19 @@ def render_admin_page() -> None:
         st.header("Matcher i databasen")
         render_matches_table()
 
-    with tab_results:
+    elif selected_view_key == "results":
         render_results_admin_section()
 
-    with tab_bonus:
+    elif selected_view_key == "bonus":
         render_bonus_admin_section()
 
-    with tab_knockout:
+    elif selected_view_key == "knockout":
         render_knockout_admin_section()
 
-    with tab_leaderboard:
+    elif selected_view_key == "leaderboard":
         render_leaderboard_section()
 
-    with tab_export:
+    elif selected_view_key == "export":
         render_admin_export_section()
 
 def render_admin_export_section() -> None:
