@@ -13,12 +13,156 @@ import streamlit as st
 from src.deadline import (
     build_deadline_iso_from_swedish_time,
 )
+
 from src.repositories.knockout_repo import (
+    get_knockout_matches,
     get_knockout_rounds,
     update_knockout_round,
+    upsert_knockout_match,
 )
+
 from src.time_utils import format_datetime_swedish
 
+def render_knockout_matches_table() -> None:
+    """
+    Visar alla slutspelsmatcher som finns i databasen.
+
+    Matcherna läggs in manuellt av admin.
+    """
+
+    matches = get_knockout_matches()
+
+    if not matches:
+        st.info("Inga slutspelsmatcher finns ännu.")
+        return
+
+    rows = []
+
+    for match in matches:
+        round_info = match.get("knockout_rounds") or {}
+
+        kickoff_at = match.get("kickoff_at")
+
+        rows.append(
+            {
+                "Match": match["match_no"],
+                "Runda": round_info.get("name", "-"),
+                "Avspark": (
+                    format_datetime_swedish(kickoff_at)
+                    if kickoff_at
+                    else "-"
+                ),
+                "Lag 1": match["home_team"],
+                "Lag 2": match["away_team"],
+                "FT lag 1": match["home_goals_ft"],
+                "FT lag 2": match["away_goals_ft"],
+                "Status": match["status"],
+            }
+        )
+
+    matches_df = pd.DataFrame(rows)
+
+    st.dataframe(
+        matches_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+def render_knockout_match_form() -> None:
+    """
+    Formulär där admin kan skapa eller uppdatera en slutspelsmatch.
+
+    match_no används som stabil nyckel.
+    Om samma matchnummer sparas igen uppdateras matchen.
+    """
+
+    st.subheader("Lägg till eller uppdatera match")
+
+    rounds = get_knockout_rounds()
+
+    if not rounds:
+        st.warning("Inga slutspelsrundor finns. Skapa rundor först.")
+        return
+
+    round_options = {
+        knockout_round["id"]: knockout_round["name"]
+        for knockout_round in rounds
+    }
+
+    with st.form("knockout_match_form"):
+        selected_round_id = st.selectbox(
+            "Runda",
+            options=list(round_options.keys()),
+            format_func=lambda round_id: round_options[round_id],
+            key="knockout_match_round_select",
+        )
+
+        match_no = st.number_input(
+            "Matchnummer",
+            min_value=73,
+            max_value=200,
+            step=1,
+            value=73,
+            help=(
+                "Gruppspelet använder 1–72. "
+                "Slutspel kan därför börja på 73."
+            ),
+        )
+
+        kickoff_date = st.date_input(
+            "Avspark datum",
+            value=date(2026, 6, 28),
+        )
+
+        kickoff_time = st.time_input(
+            "Avspark tid svensk tid",
+            value=time(18, 0),
+        )
+
+        home_team = st.text_input(
+            "Lag 1",
+            placeholder="Exempel: Vinnare Grupp A",
+        )
+
+        away_team = st.text_input(
+            "Lag 2",
+            placeholder="Exempel: Trea Grupp C/D/E",
+        )
+
+        submitted = st.form_submit_button("Spara slutspelsmatch")
+
+    if submitted:
+        cleaned_home_team = home_team.strip()
+        cleaned_away_team = away_team.strip()
+
+        if not cleaned_home_team or not cleaned_away_team:
+            st.error("Båda lagen måste fyllas i.")
+            return
+
+        kickoff_iso = build_deadline_iso_from_swedish_time(
+            kickoff_date,
+            kickoff_time,
+        )
+
+        saved_match = upsert_knockout_match(
+            {
+                "round_id": selected_round_id,
+                "match_no": int(match_no),
+                "kickoff_at": kickoff_iso,
+                "home_team": cleaned_home_team,
+                "away_team": cleaned_away_team,
+                "status": "scheduled",
+            }
+        )
+
+        if saved_match:
+            st.success(
+                f"Slutspelsmatch {int(match_no)} sparad: "
+                f"{cleaned_home_team} – {cleaned_away_team}"
+            )
+            st.info("Ladda om sidan för att se matchen i tabellen.")
+        else:
+            st.error("Kunde inte spara slutspelsmatchen.")
 
 def render_knockout_admin_section() -> None:
     """
@@ -142,3 +286,11 @@ def render_knockout_admin_section() -> None:
             st.info("Ladda om sidan för att se uppdaterad tabell.")
         else:
             st.error("Kunde inte uppdatera slutspelsrundan.")
+
+    st.divider()
+
+    st.subheader("Slutspelsmatcher")
+
+    render_knockout_matches_table()
+
+    render_knockout_match_form()
