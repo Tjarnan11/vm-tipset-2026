@@ -465,7 +465,7 @@ def render_participant_page(token: str) -> None:
         )
 
     with tab_knockout:
-        render_knockout_participant_section()
+        render_knockout_participant_section(participant)
 
     with tab_rules:
         render_rules_section()
