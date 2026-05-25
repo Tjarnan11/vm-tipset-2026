@@ -42,6 +42,8 @@ from src.ui.leaderboard_page import (
 from src.ui.results_page import render_public_matches_results_section
 from src.ui.rules import render_rules_section
 
+from src.ui.knockout_participant import render_knockout_participant_section
+
 
 def render_locked_prediction_card(
     match: dict,
@@ -409,12 +411,20 @@ def render_participant_page(token: str) -> None:
     deadline_value = get_group_stage_deadline()
     predictions_locked = is_deadline_passed(deadline_value)
 
-    tab_tips, tab_leaderboard, tab_predictions, tab_matches, tab_rules = st.tabs(
+    (
+        tab_tips,
+        tab_leaderboard,
+        tab_predictions,
+        tab_matches,
+        tab_knockout,
+        tab_rules,
+    ) = st.tabs(
         [
             "📝 Mina tips",
             "📊 Poängtabell",
             "🧾 Allas tips",
             "📅 Matcher & resultat",
+            "🏆 Slutspel",
             "ℹ️ Regler",
         ]
     )
@@ -453,6 +463,9 @@ def render_participant_page(token: str) -> None:
         render_public_matches_results_section(
             predictions_locked=predictions_locked,
         )
+
+    with tab_knockout:
+        render_knockout_participant_section()
 
     with tab_rules:
         render_rules_section()
