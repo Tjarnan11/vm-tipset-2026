@@ -16,6 +16,7 @@ from src.deadline import (
 
 from src.repositories.knockout_repo import (
     get_knockout_matches,
+    get_knockout_round_by_name,
     get_knockout_rounds,
     update_knockout_round,
     upsert_knockout_match,
@@ -164,6 +165,119 @@ def render_knockout_match_form() -> None:
         else:
             st.error("Kunde inte spara slutspelsmatchen.")
 
+def render_knockout_csv_import_section() -> None:
+    """
+    Importerar slutspelsmatcher från CSV.
+
+    CSV-format:
+        match_no,round_name,kickoff_at,home_team,away_team
+
+    Exempel:
+        73,Round of 32,2026-06-28T18:00:00+02:00,Vinnare Grupp A,Trea Grupp C/D/E
+    """
+
+    st.subheader("Importera slutspelsmatcher från CSV")
+
+    st.info(
+        "CSV-filen ska innehålla kolumnerna: "
+        "match_no, round_name, kickoff_at, home_team, away_team."
+    )
+
+    uploaded_file = st.file_uploader(
+        "Välj CSV-fil för slutspelsmatcher",
+        type=["csv"],
+        key="knockout_csv_import",
+    )
+
+    if uploaded_file is None:
+        return
+
+    try:
+        matches_df = pd.read_csv(uploaded_file)
+    except Exception as error:
+        st.error(f"Kunde inte läsa CSV-filen: {error}")
+        return
+
+    required_columns = {
+        "match_no",
+        "round_name",
+        "kickoff_at",
+        "home_team",
+        "away_team",
+    }
+
+    missing_columns = required_columns - set(matches_df.columns)
+
+    if missing_columns:
+        st.error(
+            "CSV-filen saknar kolumner: "
+            f"{', '.join(sorted(missing_columns))}"
+        )
+        return
+
+    st.write("Förhandsgranskning:")
+    st.dataframe(matches_df, width="stretch", hide_index=True)
+
+    if not st.button("Importera slutspelsmatcher"):
+        return
+
+    imported_count = 0
+    errors = []
+
+    for row_index, row in matches_df.iterrows():
+        round_name = str(row["round_name"]).strip()
+        knockout_round = get_knockout_round_by_name(round_name)
+
+        if knockout_round is None:
+            errors.append(
+                f"Rad {row_index + 2}: okänd runda '{round_name}'"
+            )
+            continue
+
+        try:
+            match_no = int(row["match_no"])
+        except ValueError:
+            errors.append(
+                f"Rad {row_index + 2}: match_no är inte ett heltal"
+            )
+            continue
+
+        home_team = str(row["home_team"]).strip()
+        away_team = str(row["away_team"]).strip()
+        kickoff_at = str(row["kickoff_at"]).strip()
+
+        if not home_team or not away_team:
+            errors.append(
+                f"Rad {row_index + 2}: home_team eller away_team saknas"
+            )
+            continue
+
+        saved_match = upsert_knockout_match(
+            {
+                "round_id": knockout_round["id"],
+                "match_no": match_no,
+                "kickoff_at": kickoff_at,
+                "home_team": home_team,
+                "away_team": away_team,
+                "status": "scheduled",
+            }
+        )
+
+        if saved_match:
+            imported_count += 1
+        else:
+            errors.append(
+                f"Rad {row_index + 2}: kunde inte spara match {match_no}"
+            )
+
+    if imported_count > 0:
+        st.success(f"Importerade/uppdaterade {imported_count} matcher.")
+
+    if errors:
+        st.warning("Vissa rader kunde inte importeras:")
+        for error in errors:
+            st.write(f"- {error}")
+
 def render_knockout_admin_section() -> None:
     """
     Adminsektion för slutspelstipset.
@@ -292,5 +406,7 @@ def render_knockout_admin_section() -> None:
     st.subheader("Slutspelsmatcher")
 
     render_knockout_matches_table()
+
+    render_knockout_csv_import_section()
 
     render_knockout_match_form()

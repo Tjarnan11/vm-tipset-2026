@@ -1,0 +1,8 @@
+match_no,round_name,kickoff_at,home_team,away_team
+73,Round of 32,2026-06-28T18:00:00+02:00,Vinnare Grupp A,Trea Grupp C/D/E
+74,Round of 32,2026-06-28T21:00:00+02:00,Vinnare Grupp B,Trea Grupp F/G/H
+89,Round of 16,2026-07-04T18:00:00+02:00,Vinnare Match 73,Vinnare Match 74
+97,Kvartsfinaler,2026-07-09T21:00:00+02:00,Vinnare Match 89,Vinnare Match 90
+101,Semifinaler,2026-07-14T21:00:00+02:00,Vinnare Match 97,Vinnare Match 98
+103,Finalrunda,2026-07-18T18:00:00+02:00,Förlorare Match 101,Förlorare Match 102
+104,Finalrunda,2026-07-19T21:00:00+02:00,Vinnare Match 101,Vinnare Match 102

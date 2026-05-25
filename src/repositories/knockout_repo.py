@@ -427,3 +427,25 @@ def save_knockout_final_result(
         return response.data[0]
 
     return None
+
+def get_knockout_round_by_name(round_name: str) -> dict | None:
+    """
+    Hämtar en slutspelsrunda baserat på namn.
+
+    Används vid CSV-import där CSV-filen innehåller round_name.
+    """
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("knockout_rounds")
+        .select("id, name, sort_order, deadline_at, status, created_at")
+        .eq("name", round_name)
+        .limit(1)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+
+    return None
