@@ -17,7 +17,6 @@ from src.repositories.participants_repo import get_participant_by_token
 from src.repositories.predictions_repo import (
     delete_predictions_for_matches,
     get_predictions_for_participant,
-    save_predictions,
 )
 from src.repositories.settings_repo import get_group_stage_deadline
 from src.scoring import (
@@ -344,10 +343,10 @@ def render_predictions_form(
             match_ids=match_ids_to_delete,
         )
 
-        saved_predictions = save_predictions(
-            participant_id=participant_id,
-            predictions=predictions_to_save,
-        )
+        # saved_predictions = save_predictions(
+        #    participant_id=participant_id,
+        #   predictions=predictions_to_save,
+        #)
 
         existing_match_ids = set(predictions_by_match_id.keys())
 

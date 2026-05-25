@@ -15,9 +15,11 @@ from src.deadline import (
 )
 
 from src.repositories.knockout_repo import (
+    clear_knockout_match_result,
     get_knockout_matches,
     get_knockout_round_by_name,
     get_knockout_rounds,
+    update_knockout_match_result,
     update_knockout_round,
     upsert_knockout_match,
 )
@@ -278,6 +280,126 @@ def render_knockout_csv_import_section() -> None:
         for error in errors:
             st.write(f"- {error}")
 
+def render_knockout_result_admin_section() -> None:
+    """
+    Adminsektion för att fylla i fulltidsresultat i slutspelsmatcher.
+
+    Viktigt:
+    - Resultatet gäller efter fulltid: 90 minuter + tillägg
+    - Ej förlängning
+    - Ej straffläggning
+    """
+
+    st.subheader("Fyll i slutspelsresultat")
+
+    matches = get_knockout_matches()
+
+    if not matches:
+        st.info("Inga slutspelsmatcher finns ännu.")
+        return
+
+    match_label_by_id = {}
+
+    for match in matches:
+        round_info = match.get("knockout_rounds") or {}
+        round_name = round_info.get("name", "Okänd runda")
+
+        result_text = ""
+
+        if match["status"] == "finished":
+            result_text = (
+                f" ({match['home_goals_ft']}"
+                f"–{match['away_goals_ft']})"
+            )
+
+        label = (
+            f"Match {match['match_no']} · {round_name} – "
+            f"{match['home_team']} vs {match['away_team']}"
+            f"{result_text}"
+        )
+
+        match_label_by_id[match["id"]] = label
+
+    selected_match_id = st.selectbox(
+        "Välj slutspelsmatch",
+        options=list(match_label_by_id.keys()),
+        format_func=lambda match_id: match_label_by_id[match_id],
+        key="knockout_result_match_select",
+    )
+
+    selected_match = next(
+        match for match in matches
+        if match["id"] == selected_match_id
+    )
+
+    st.markdown(
+        f"### {selected_match['home_team']} – {selected_match['away_team']}"
+    )
+
+    st.caption(
+        "Resultatet ska vara efter fulltid: 90 minuter + tillägg. "
+        "Förlängning och straffar räknas inte."
+    )
+
+    current_home_goals = selected_match.get("home_goals_ft")
+    current_away_goals = selected_match.get("away_goals_ft")
+
+    home_goals_ft = st.number_input(
+        f"Fulltidsmål för {selected_match['home_team']}",
+        min_value=0,
+        step=1,
+        value=int(current_home_goals) if current_home_goals is not None else 0,
+        key=f"ko_result_home_{selected_match_id}",
+    )
+
+    away_goals_ft = st.number_input(
+        f"Fulltidsmål för {selected_match['away_team']}",
+        min_value=0,
+        step=1,
+        value=int(current_away_goals) if current_away_goals is not None else 0,
+        key=f"ko_result_away_{selected_match_id}",
+    )
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        save_clicked = st.button(
+            "Spara slutspelsresultat",
+            key="save_knockout_result",
+        )
+
+    with col2:
+        clear_clicked = st.button(
+            "Rensa slutspelsresultat",
+            key="clear_knockout_result",
+        )
+
+    if save_clicked:
+        updated_match = update_knockout_match_result(
+            match_id=selected_match_id,
+            home_goals_ft=int(home_goals_ft),
+            away_goals_ft=int(away_goals_ft),
+        )
+
+        if updated_match:
+            st.success(
+                f"Resultat sparat: "
+                f"{selected_match['home_team']} {int(home_goals_ft)}–"
+                f"{int(away_goals_ft)} {selected_match['away_team']}"
+            )
+            st.info("Ladda om sidan för att se uppdaterad status i listan.")
+        else:
+            st.error("Kunde inte spara slutspelsresultatet.")
+
+    if clear_clicked:
+        cleared_match = clear_knockout_match_result(selected_match_id)
+
+        if cleared_match:
+            st.success("Slutspelsresultatet är rensat.")
+            st.info("Ladda om sidan för att se uppdaterad status i listan.")
+        else:
+            st.error("Kunde inte rensa slutspelsresultatet.")
+
 def render_knockout_admin_section() -> None:
     """
     Adminsektion för slutspelstipset.
@@ -410,3 +532,7 @@ def render_knockout_admin_section() -> None:
     render_knockout_csv_import_section()
 
     render_knockout_match_form()
+
+    st.divider()
+
+    render_knockout_result_admin_section()
