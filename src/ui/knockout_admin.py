@@ -22,11 +22,15 @@ from src.repositories.knockout_repo import (
     update_knockout_match_result,
     update_knockout_round,
     upsert_knockout_match,
+    get_all_knockout_predictions,
+    update_first_scorer_correct,
 )
 
 from src.time_utils import format_datetime_swedish
 
 from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
+
+from src.repositories.participants_repo import get_active_participants
 
 def render_knockout_matches_table() -> None:
     """
@@ -402,6 +406,193 @@ def render_knockout_result_admin_section() -> None:
         else:
             st.error("Kunde inte rensa slutspelsresultatet.")
 
+def format_first_scorer_status(value: bool | None) -> str:
+    """
+    Gör om first_scorer_correct till läsbar admintext.
+    """
+
+    if value is True:
+        return "Rätt"
+
+    if value is False:
+        return "Fel"
+
+    return "Ej bedömt"
+
+
+def parse_first_scorer_status(label: str) -> bool | None:
+    """
+    Gör om adminvalet till databasvärde.
+    """
+
+    if label == "Rätt":
+        return True
+
+    if label == "Fel":
+        return False
+
+    return None
+
+def render_first_scorer_admin_section() -> None:
+    """
+    Adminsektion för att bedöma första målskytt i slutspelsmatcher.
+
+    Deltagarna skriver målskytt som fritext.
+    Admin markerar varje deltagares tips som:
+    - Ej bedömt
+    - Rätt
+    - Fel
+    """
+
+    st.subheader("Bedöm första målskytt")
+
+    matches = get_knockout_matches()
+    participants = get_active_participants()
+    predictions = get_all_knockout_predictions()
+
+    if not matches:
+        st.info("Inga slutspelsmatcher finns ännu.")
+        return
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    if not predictions:
+        st.info("Inga slutspelstips finns ännu.")
+        return
+
+    participant_name_by_id = {
+        participant["id"]: participant["display_name"]
+        for participant in participants
+    }
+
+    match_label_by_id = {}
+
+    for match in matches:
+        round_info = match.get("knockout_rounds") or {}
+        round_name = round_info.get("name", "Okänd runda")
+
+        label = (
+            f"Match {match['match_no']} · {round_name} – "
+            f"{match['home_team']} vs {match['away_team']}"
+        )
+
+        match_label_by_id[match["id"]] = label
+
+    selected_match_id = st.selectbox(
+        "Välj match för målskytt-bedömning",
+        options=list(match_label_by_id.keys()),
+        format_func=lambda match_id: match_label_by_id[match_id],
+        key="first_scorer_match_select",
+    )
+
+    selected_match = next(
+        match for match in matches
+        if match["id"] == selected_match_id
+    )
+
+    st.markdown(
+        f"### {selected_match['home_team']} – {selected_match['away_team']}"
+    )
+
+    predictions_for_match = [
+        prediction for prediction in predictions
+        if prediction["match_id"] == selected_match_id
+    ]
+
+    if not predictions_for_match:
+        st.info("Ingen deltagare har tippat denna match ännu.")
+        return
+
+    status_options = [
+        "Ej bedömt",
+        "Rätt",
+        "Fel",
+    ]
+
+    rows = []
+
+    for prediction in predictions_for_match:
+        rows.append(
+            {
+                "Deltagare": participant_name_by_id.get(
+                    prediction["participant_id"],
+                    "Okänd deltagare",
+                ),
+                "Första målskytt": prediction.get("first_scorer_pick") or "-",
+                "Status": format_first_scorer_status(
+                    prediction.get("first_scorer_correct")
+                ),
+            }
+        )
+
+    st.dataframe(
+        pd.DataFrame(rows),
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.caption(
+        "Tips markerade som Rätt ger 4 poäng i slutspelstabellen. "
+        "Ej bedömt och Fel ger 0 poäng."
+    )
+
+    st.subheader("Uppdatera bedömning")
+
+    prediction_label_by_id = {}
+
+    for prediction in predictions_for_match:
+        participant_name = participant_name_by_id.get(
+            prediction["participant_id"],
+            "Okänd deltagare",
+        )
+
+        first_scorer_pick = prediction.get("first_scorer_pick") or "-"
+
+        prediction_label_by_id[prediction["id"]] = (
+            f"{participant_name}: {first_scorer_pick}"
+        )
+
+    selected_prediction_id = st.selectbox(
+        "Välj deltagarens målskytt-tips",
+        options=list(prediction_label_by_id.keys()),
+        format_func=lambda prediction_id: prediction_label_by_id[prediction_id],
+        key="first_scorer_prediction_select",
+    )
+
+    selected_prediction = next(
+        prediction for prediction in predictions_for_match
+        if prediction["id"] == selected_prediction_id
+    )
+
+    current_status_label = format_first_scorer_status(
+        selected_prediction.get("first_scorer_correct")
+    )
+
+    current_status_index = status_options.index(current_status_label)
+
+    selected_status_label = st.selectbox(
+        "Bedömning",
+        options=status_options,
+        index=current_status_index,
+        key="first_scorer_status_select",
+    )
+
+    if st.button("Spara målskytt-bedömning"):
+        saved_value = parse_first_scorer_status(selected_status_label)
+
+        updated_prediction = update_first_scorer_correct(
+            prediction_id=selected_prediction_id,
+            first_scorer_correct=saved_value,
+        )
+
+        if updated_prediction:
+            st.success("Målskytt-bedömningen är sparad.")
+            st.info("Ladda om sidan för att se uppdaterad tabell.")
+        else:
+            st.error("Kunde inte spara målskytt-bedömningen.")
+
 def render_knockout_admin_section() -> None:
     """
     Adminsektion för slutspelstipset.
@@ -538,6 +729,10 @@ def render_knockout_admin_section() -> None:
     st.divider()
 
     render_knockout_result_admin_section()
+
+    st.divider()
+
+    render_first_scorer_admin_section()
 
     st.divider()
 
