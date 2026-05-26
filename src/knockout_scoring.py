@@ -94,3 +94,109 @@ def calculate_knockout_match_points(
         "exact_result_points": exact_result_points,
         "first_scorer_points": first_scorer_points,
     }
+
+def build_knockout_leaderboard(
+    participants: list[dict],
+    matches: list[dict],
+    predictions: list[dict],
+) -> list[dict]:
+    """
+    Bygger slutspels-poängtabell.
+
+    Poängen räknas bara på slutspelsmatcher som har fulltidsresultat.
+
+    Sortering:
+    1. Poäng
+    2. Flest exakta resultat
+    3. Flest rätt 1/X/2
+    4. Flest rätt första målskytt
+    5. Namn
+    """
+
+    finished_matches = [
+        match for match in matches
+        if is_finished_knockout_match(match)
+    ]
+
+    finished_matches_by_id = {
+        match["id"]: match
+        for match in finished_matches
+    }
+
+    leaderboard_by_participant_id = {}
+
+    for participant in participants:
+        participant_id = participant["id"]
+
+        leaderboard_by_participant_id[participant_id] = {
+            "participant_id": participant_id,
+            "Namn": participant["display_name"],
+            "Poäng": 0,
+            "Rätt 1X2": 0,
+            "Rätt Ö/U": 0,
+            "Exakta resultat": 0,
+            "Rätt första målskytt": 0,
+            "Räknade matcher": len(finished_matches),
+            "Maxpoäng just nu": len(finished_matches) * 8,
+        }
+
+    for prediction in predictions:
+        participant_id = prediction["participant_id"]
+        match_id = prediction["match_id"]
+
+        if participant_id not in leaderboard_by_participant_id:
+            continue
+
+        match = finished_matches_by_id.get(match_id)
+
+        if match is None:
+            continue
+
+        score = calculate_knockout_match_points(
+            prediction=prediction,
+            match=match,
+        )
+
+        row = leaderboard_by_participant_id[participant_id]
+
+        row["Poäng"] += score["points"]
+        row["Rätt 1X2"] += score["outcome_points"]
+        row["Rätt Ö/U"] += score["goals_points"]
+
+        if score["exact_result_points"] > 0:
+            row["Exakta resultat"] += 1
+
+        if score["first_scorer_points"] > 0:
+            row["Rätt första målskytt"] += 1
+
+    leaderboard = list(leaderboard_by_participant_id.values())
+
+    leaderboard.sort(
+        key=lambda row: (
+            -row["Poäng"],
+            -row["Exakta resultat"],
+            -row["Rätt 1X2"],
+            -row["Rätt första målskytt"],
+            row["Namn"].lower(),
+        )
+    )
+
+    previous_tiebreak_key = None
+    previous_placement = 0
+
+    for index, row in enumerate(leaderboard, start=1):
+        current_tiebreak_key = (
+            row["Poäng"],
+            row["Exakta resultat"],
+            row["Rätt 1X2"],
+            row["Rätt första målskytt"],
+        )
+
+        if current_tiebreak_key == previous_tiebreak_key:
+            row["Placering"] = previous_placement
+        else:
+            row["Placering"] = index
+            previous_placement = index
+            previous_tiebreak_key = current_tiebreak_key
+
+    return leaderboard

@@ -26,6 +26,8 @@ from src.repositories.knockout_repo import (
 
 from src.time_utils import format_datetime_swedish
 
+from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
+
 def render_knockout_matches_table() -> None:
     """
     Visar alla slutspelsmatcher som finns i databasen.
@@ -536,3 +538,7 @@ def render_knockout_admin_section() -> None:
     st.divider()
 
     render_knockout_result_admin_section()
+
+    st.divider()
+
+    render_knockout_leaderboard_section()

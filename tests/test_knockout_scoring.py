@@ -4,6 +4,8 @@ from src.knockout_scoring import (
     is_finished_knockout_match,
 )
 
+from src.knockout_scoring import build_knockout_leaderboard
+
 
 def test_get_knockout_prediction_outcome_home_win():
     assert get_knockout_prediction_outcome(2, 1) == "1"
@@ -88,3 +90,61 @@ def test_calculate_knockout_match_points_partial():
     assert score["goals_points"] == 0
     assert score["exact_result_points"] == 0
     assert score["first_scorer_points"] == 0
+
+
+
+
+def test_build_knockout_leaderboard():
+    participants = [
+        {"id": "p1", "display_name": "Anna"},
+        {"id": "p2", "display_name": "Erik"},
+    ]
+
+    matches = [
+        {
+            "id": "m1",
+            "status": "finished",
+            "home_goals_ft": 2,
+            "away_goals_ft": 1,
+        }
+    ]
+
+    predictions = [
+        {
+            "participant_id": "p1",
+            "match_id": "m1",
+            "predicted_home_goals": 2,
+            "predicted_away_goals": 1,
+            "goals_pick": "over",
+            "first_scorer_correct": False,
+        },
+        {
+            "participant_id": "p2",
+            "match_id": "m1",
+            "predicted_home_goals": 1,
+            "predicted_away_goals": 0,
+            "goals_pick": "under",
+            "first_scorer_correct": False,
+        },
+    ]
+
+    leaderboard = build_knockout_leaderboard(
+        participants=participants,
+        matches=matches,
+        predictions=predictions,
+    )
+
+    anna = next(row for row in leaderboard if row["Namn"] == "Anna")
+    erik = next(row for row in leaderboard if row["Namn"] == "Erik")
+
+    assert anna["Poäng"] == 4
+    assert anna["Rätt 1X2"] == 1
+    assert anna["Rätt Ö/U"] == 1
+    assert anna["Exakta resultat"] == 1
+    assert anna["Placering"] == 1
+
+    assert erik["Poäng"] == 1
+    assert erik["Rätt 1X2"] == 1
+    assert erik["Rätt Ö/U"] == 0
+    assert erik["Exakta resultat"] == 0
+    assert erik["Placering"] == 2

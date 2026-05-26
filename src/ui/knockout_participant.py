@@ -22,6 +22,8 @@ from src.repositories.knockout_repo import (
 from src.time_utils import format_datetime_swedish
 from src.ui.formatting import format_goals_pick_label
 
+from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
+
 
 def is_knockout_round_open_for_predictions(
     knockout_round: dict,
@@ -395,11 +397,12 @@ def render_knockout_participant_section(
         st.info("Slutspelet är inte förberett ännu.")
         return
 
-    tab_rounds, tab_predictions, tab_matches = st.tabs(
+    tab_rounds, tab_predictions, tab_matches, tab_leaderboard = st.tabs(
         [
             "🏆 Rundor",
             "📝 Tippa",
             "📅 Matcher",
+            "📊 Tabell",
         ]
     )
 
@@ -432,3 +435,6 @@ def render_knockout_participant_section(
 
     with tab_matches:
         render_knockout_matches_overview()
+
+    with tab_leaderboard:
+        render_knockout_leaderboard_section()
