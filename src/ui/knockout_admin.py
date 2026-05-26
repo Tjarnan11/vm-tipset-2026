@@ -32,7 +32,10 @@ from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
 
 from src.repositories.participants_repo import get_active_participants
 
-from src.ui.knockout_final import render_knockout_final_admin_section
+from src.ui.knockout_final import (
+    render_knockout_final_admin_section,
+    render_knockout_final_review_admin_section,
+)
 
 def render_knockout_matches_table() -> None:
     """
@@ -739,6 +742,10 @@ def render_knockout_admin_section() -> None:
     st.divider()
 
     render_knockout_final_admin_section()
+
+    st.divider()
+
+    render_knockout_final_review_admin_section()
 
     st.divider()
 

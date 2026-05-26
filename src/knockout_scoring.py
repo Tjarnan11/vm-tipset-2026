@@ -95,10 +95,57 @@ def calculate_knockout_match_points(
         "first_scorer_points": first_scorer_points,
     }
 
+def calculate_knockout_final_points(
+    final_prediction: dict | None,
+) -> dict:
+    """
+    Räknar poäng för finaltips.
+
+    Finaltips bedöms manuellt av admin:
+    - correct_finalists_count: 0, 1 eller 2
+    - winner_correct: True/False
+
+    Poäng:
+    - 5 poäng per rätt finallag
+    - 10 poäng för rätt finalvinnare
+    """
+
+    if final_prediction is None:
+        return {
+            "points": 0,
+            "finalist_points": 0,
+            "winner_points": 0,
+            "correct_finalists_count": 0,
+            "winner_correct_count": 0,
+        }
+
+    correct_finalists_count = final_prediction.get(
+        "correct_finalists_count"
+    )
+
+    if correct_finalists_count is None:
+        correct_finalists_count = 0
+
+    correct_finalists_count = int(correct_finalists_count)
+
+    winner_correct = final_prediction.get("winner_correct") is True
+
+    finalist_points = correct_finalists_count * 5
+    winner_points = 10 if winner_correct else 0
+
+    return {
+        "points": finalist_points + winner_points,
+        "finalist_points": finalist_points,
+        "winner_points": winner_points,
+        "correct_finalists_count": correct_finalists_count,
+        "winner_correct_count": 1 if winner_correct else 0,
+    }
+
 def build_knockout_leaderboard(
     participants: list[dict],
     matches: list[dict],
     predictions: list[dict],
+    final_predictions: list[dict] | None = None,
 ) -> list[dict]:
     """
     Bygger slutspels-poängtabell.
@@ -123,6 +170,13 @@ def build_knockout_leaderboard(
         for match in finished_matches
     }
 
+    final_predictions = final_predictions or []
+
+    final_prediction_by_participant_id = {
+        final_prediction["participant_id"]: final_prediction
+        for final_prediction in final_predictions
+    }
+
     leaderboard_by_participant_id = {}
 
     for participant in participants:
@@ -132,6 +186,9 @@ def build_knockout_leaderboard(
             "participant_id": participant_id,
             "Namn": participant["display_name"],
             "Poäng": 0,
+            "Finalpoäng": 0,
+            "Rätt finallag": 0,
+            "Rätt finalvinnare": 0,
             "Rätt 1X2": 0,
             "Rätt Ö/U": 0,
             "Exakta resultat": 0,
@@ -168,6 +225,25 @@ def build_knockout_leaderboard(
 
         if score["first_scorer_points"] > 0:
             row["Rätt första målskytt"] += 1
+
+
+    for participant_id, row in leaderboard_by_participant_id.items():
+        final_prediction = final_prediction_by_participant_id.get(
+            participant_id
+        )
+
+        final_score = calculate_knockout_final_points(final_prediction)
+
+        row["Poäng"] += final_score["points"]
+        row["Finalpoäng"] = final_score["points"]
+        row["Rätt finallag"] = final_score["correct_finalists_count"]
+        row["Rätt finalvinnare"] = final_score["winner_correct_count"]
+
+        # När finaltips är bedömda blir maxpoängen +20.
+        # Detta är en förenkling: maxpoäng just nu visar max från spelade
+        # slutspelsmatcher plus finalbonus när finaltips finns/bedöms.
+        if final_prediction is not None:
+            row["Maxpoäng just nu"] += 20
 
     leaderboard = list(leaderboard_by_participant_id.values())
 

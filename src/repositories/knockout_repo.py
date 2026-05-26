@@ -311,7 +311,10 @@ def get_knockout_final_prediction_for_participant(
 
     response = (
         supabase.table("knockout_final_predictions")
-        .select("participant_id, finalist_1, finalist_2, winner, updated_at")
+        .select(
+            "participant_id, finalist_1, finalist_2, winner, "
+            "correct_finalists_count, winner_correct, updated_at"
+        )
         .eq("participant_id", participant_id)
         .limit(1)
         .execute()
@@ -366,7 +369,10 @@ def get_all_knockout_final_predictions() -> list[dict]:
 
     response = (
         supabase.table("knockout_final_predictions")
-        .select("participant_id, finalist_1, finalist_2, winner, updated_at")
+        .select(
+            "participant_id, finalist_1, finalist_2, winner, "
+            "correct_finalists_count, winner_correct, updated_at"
+        )
         .execute()
     )
 
@@ -442,6 +448,45 @@ def get_knockout_round_by_name(round_name: str) -> dict | None:
         .select("id, name, sort_order, deadline_at, status, created_at")
         .eq("name", round_name)
         .limit(1)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+
+    return None
+
+def update_knockout_final_prediction_review(
+    participant_id: str,
+    correct_finalists_count: int | None,
+    winner_correct: bool | None,
+) -> dict | None:
+    """
+    Admin bedömer en deltagares finaltips manuellt.
+
+    correct_finalists_count:
+        None = ej bedömt
+        0, 1 eller 2 = antal rätt finallag
+
+    winner_correct:
+        None = ej bedömt
+        True = rätt vinnare
+        False = fel vinnare
+    """
+
+    supabase = get_supabase_client()
+    now = datetime.now(timezone.utc).isoformat()
+
+    response = (
+        supabase.table("knockout_final_predictions")
+        .update(
+            {
+                "correct_finalists_count": correct_finalists_count,
+                "winner_correct": winner_correct,
+                "updated_at": now,
+            }
+        )
+        .eq("participant_id", participant_id)
         .execute()
     )
 

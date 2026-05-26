@@ -7,6 +7,7 @@ import streamlit as st
 
 from src.knockout_scoring import build_knockout_leaderboard
 from src.repositories.knockout_repo import (
+    get_all_knockout_final_predictions,
     get_all_knockout_predictions,
     get_knockout_matches,
 )
@@ -23,6 +24,8 @@ def render_knockout_leaderboard_section() -> None:
     participants = get_active_participants()
     matches = get_knockout_matches()
     predictions = get_all_knockout_predictions()
+
+    final_predictions = get_all_knockout_final_predictions()
 
     if not participants:
         st.info("Inga deltagare finns ännu.")
@@ -45,6 +48,7 @@ def render_knockout_leaderboard_section() -> None:
         participants=participants,
         matches=matches,
         predictions=predictions,
+        final_predictions=final_predictions,
     )
 
     leaderboard_df = pd.DataFrame(leaderboard)
@@ -53,10 +57,13 @@ def render_knockout_leaderboard_section() -> None:
         "Placering",
         "Namn",
         "Poäng",
+        "Finalpoäng",
         "Exakta resultat",
         "Rätt 1X2",
         "Rätt Ö/U",
         "Rätt första målskytt",
+        "Rätt finallag",
+        "Rätt finalvinnare",
         "Räknade matcher",
         "Maxpoäng just nu",
     ]
