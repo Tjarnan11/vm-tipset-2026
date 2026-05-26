@@ -24,6 +24,8 @@ from src.ui.formatting import format_goals_pick_label
 
 from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
 
+from src.ui.knockout_final import render_knockout_final_prediction_section
+
 
 def is_knockout_round_open_for_predictions(
     knockout_round: dict,
@@ -397,10 +399,17 @@ def render_knockout_participant_section(
         st.info("Slutspelet är inte förberett ännu.")
         return
 
-    tab_rounds, tab_predictions, tab_matches, tab_leaderboard = st.tabs(
+    (
+        tab_rounds,
+        tab_predictions,
+        tab_final,
+        tab_matches,
+        tab_leaderboard,
+    ) = st.tabs(
         [
             "🏆 Rundor",
             "📝 Tippa",
+            "🏁 Finaltips",
             "📅 Matcher",
             "📊 Tabell",
         ]
@@ -432,6 +441,9 @@ def render_knockout_participant_section(
             participant=participant,
             knockout_round=selected_round,
         )
+
+    with tab_final:
+        render_knockout_final_prediction_section(participant)
 
     with tab_matches:
         render_knockout_matches_overview()
