@@ -480,6 +480,7 @@ def render_predictions_form(
 
 def render_saved_group_stage_predictions_section(
     participant: dict,
+    predictions_locked: bool,
 ) -> None:
     """
     Visar en read-only-sammanfattning av deltagarens sparade gruppspelstips.
@@ -489,6 +490,19 @@ def render_saved_group_stage_predictions_section(
     """
 
     st.header("Sparade gruppspelstips")
+
+    if predictions_locked:
+        st.info(
+            "Deadline har passerat. Under Gruppspelstips kan du se dina tips "
+            "tillsammans med rätt rad och poäng per match. Den här sidan är en "
+            "enkel sammanfattning av dina sparade tips."
+        )
+    else:
+        st.caption(
+            "Detta är en sammanfattning av de tips som just nu är sparade. "
+            "Om du ändrar något i tipsformuläret behöver du trycka på Spara ändringar "
+            "innan det syns här."
+        )
 
     participant_id = participant["id"]
 
@@ -628,7 +642,10 @@ def render_participant_page(token: str) -> None:
         render_my_group_stage_export_section(participant)
 
     with tab_saved_tips:
-        render_saved_group_stage_predictions_section(participant)
+        render_saved_group_stage_predictions_section(
+            participant=participant,
+            predictions_locked=predictions_locked,
+        )
 
     with tab_leaderboard:
         if predictions_locked:
