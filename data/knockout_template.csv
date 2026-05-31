@@ -1,8 +1,33 @@
 match_no,round_name,kickoff_at,home_team,away_team
-73,Round of 32,2026-06-28T18:00:00+02:00,Vinnare Grupp A,Trea Grupp C/D/E
-74,Round of 32,2026-06-28T21:00:00+02:00,Vinnare Grupp B,Trea Grupp F/G/H
-89,Round of 16,2026-07-04T18:00:00+02:00,Vinnare Match 73,Vinnare Match 74
-97,Kvartsfinaler,2026-07-09T21:00:00+02:00,Vinnare Match 89,Vinnare Match 90
+73,Round of 32,2026-06-28T21:00:00+02:00,Tvåa Grupp A,Tvåa Grupp B
+74,Round of 32,2026-06-29T19:00:00+02:00,Vinnare Grupp C,Tvåa Grupp F
+75,Round of 32,2026-06-29T22:30:00+02:00,Vinnare Grupp E,Bästa trea Grupp A/B/C/D/F
+76,Round of 32,2026-06-30T03:00:00+02:00,Vinnare Grupp F,Tvåa Grupp C
+77,Round of 32,2026-06-30T19:00:00+02:00,Tvåa Grupp E,Tvåa Grupp I
+78,Round of 32,2026-06-30T23:00:00+02:00,Vinnare Grupp I,Bästa trea Grupp C/D/F/G/H
+79,Round of 32,2026-07-01T03:00:00+02:00,Vinnare Grupp A,Bästa trea Grupp C/E/F/H/I
+80,Round of 32,2026-07-01T18:00:00+02:00,Vinnare Grupp L,Bästa trea Grupp E/H/I/J/K
+81,Round of 32,2026-07-01T22:00:00+02:00,Vinnare Grupp G,Bästa trea Grupp A/E/H/I/J
+82,Round of 32,2026-07-02T02:00:00+02:00,Vinnare Grupp D,Bästa trea Grupp B/E/F/I/J
+83,Round of 32,2026-07-02T21:00:00+02:00,Vinnare Grupp H,Tvåa Grupp J
+84,Round of 32,2026-07-03T01:00:00+02:00,Tvåa Grupp K,Tvåa Grupp L
+85,Round of 32,2026-07-03T05:00:00+02:00,Vinnare Grupp B,Bästa trea Grupp E/F/G/I/J
+86,Round of 32,2026-07-03T20:00:00+02:00,Tvåa Grupp D,Tvåa Grupp G
+87,Round of 32,2026-07-04T00:00:00+02:00,Vinnare Grupp J,Tvåa Grupp H
+88,Round of 32,2026-07-04T03:30:00+02:00,Vinnare Grupp K,Bästa trea Grupp D/E/I/J/L
+89,Round of 16,2026-07-04T19:00:00+02:00,Vinnare Match 73,Vinnare Match 76
+90,Round of 16,2026-07-04T23:00:00+02:00,Vinnare Match 75,Vinnare Match 78
+91,Round of 16,2026-07-05T22:00:00+02:00,Vinnare Match 74,Vinnare Match 77
+92,Round of 16,2026-07-06T02:00:00+02:00,Vinnare Match 79,Vinnare Match 80
+93,Round of 16,2026-07-06T21:00:00+02:00,Vinnare Match 84,Vinnare Match 83
+94,Round of 16,2026-07-07T02:00:00+02:00,Vinnare Match 82,Vinnare Match 81
+95,Round of 16,2026-07-07T18:00:00+02:00,Vinnare Match 87,Vinnare Match 86
+96,Round of 16,2026-07-07T22:00:00+02:00,Vinnare Match 85,Vinnare Match 88
+97,Kvartsfinaler,2026-07-09T22:00:00+02:00,Vinnare Match 90,Vinnare Match 89
+98,Kvartsfinaler,2026-07-10T21:00:00+02:00,Vinnare Match 93,Vinnare Match 94
+99,Kvartsfinaler,2026-07-11T23:00:00+02:00,Vinnare Match 91,Vinnare Match 92
+100,Kvartsfinaler,2026-07-12T03:00:00+02:00,Vinnare Match 95,Vinnare Match 96
 101,Semifinaler,2026-07-14T21:00:00+02:00,Vinnare Match 97,Vinnare Match 98
-103,Finalrunda,2026-07-18T18:00:00+02:00,Förlorare Match 101,Förlorare Match 102
+102,Semifinaler,2026-07-15T21:00:00+02:00,Vinnare Match 99,Vinnare Match 100
+103,Finalrunda,2026-07-18T23:00:00+02:00,Förlorare Match 101,Förlorare Match 102
 104,Finalrunda,2026-07-19T21:00:00+02:00,Vinnare Match 101,Vinnare Match 102
