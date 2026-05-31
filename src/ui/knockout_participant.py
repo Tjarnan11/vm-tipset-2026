@@ -13,6 +13,7 @@ import streamlit as st
 
 from src.deadline import is_deadline_passed
 from src.repositories.knockout_repo import (
+    get_all_knockout_predictions,
     get_knockout_matches,
     get_knockout_matches_for_round,
     get_knockout_predictions_for_participant,
@@ -29,6 +30,7 @@ from src.ui.knockout_final import render_knockout_final_prediction_section
 from src.knockout_scoring import calculate_knockout_match_points
 from src.scoring import get_goals_pick, get_match_outcome
 
+from src.repositories.participants_repo import get_active_participants
 
 
 def is_knockout_round_open_for_predictions(
@@ -64,6 +66,20 @@ def is_finished_knockout_match(match: dict) -> bool:
         and match.get("away_goals_ft") is not None
     )
 
+def is_knockout_round_locked_for_match(match: dict) -> bool:
+    """
+    Kontrollerar om en match tillhör en låst/stängd slutspelsrunda.
+
+    Allas tips ska bara visas när rundan inte längre är öppen.
+    """
+
+    round_info = match.get("knockout_rounds") or {}
+    status = round_info.get("status")
+
+    return status in {
+        "locked",
+        "finished",
+    }
 
 def format_knockout_match_result_text(match: dict) -> str:
     """
@@ -416,11 +432,98 @@ def render_saved_knockout_predictions_section(
             else:
                 st.info("Inget sparat tips på denna match.")
 
+def render_all_knockout_predictions_for_match(
+    match: dict,
+    participants: list[dict],
+    predictions: list[dict],
+) -> None:
+    """
+    Visar allas slutspelstips för en match.
+
+    Visas endast när rundan är låst/stängd.
+    """
+
+    participant_name_by_id = {
+        participant["id"]: participant["display_name"]
+        for participant in participants
+    }
+
+    predictions_by_participant_id = {
+        prediction["participant_id"]: prediction
+        for prediction in predictions
+        if prediction["match_id"] == match["id"]
+    }
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+        prediction = predictions_by_participant_id.get(participant_id)
+
+        if prediction:
+            predicted_home_goals = prediction["predicted_home_goals"]
+            predicted_away_goals = prediction["predicted_away_goals"]
+
+            predicted_outcome = get_match_outcome(
+                int(predicted_home_goals),
+                int(predicted_away_goals),
+            )
+
+            tip_text = (
+                f"{predicted_home_goals}–{predicted_away_goals} "
+                f"({predicted_outcome})"
+            )
+
+            goals_text = format_goals_pick_label(prediction["goals_pick"])
+            first_scorer_text = prediction.get("first_scorer_pick") or "-"
+
+            if is_finished_knockout_match(match):
+                score = calculate_knockout_match_points(
+                    prediction=prediction,
+                    match=match,
+                )
+
+                points_text = (
+                    f"{score['points']}/8 "
+                    f"({score['outcome_points']}p 1X2, "
+                    f"{score['goals_points']}p Ö/U, "
+                    f"{score['exact_result_points']}p exakt, "
+                    f"{score['first_scorer_points']}p målskytt)"
+                )
+            else:
+                points_text = "-"
+
+        else:
+            tip_text = "-"
+            goals_text = "-"
+            first_scorer_text = "-"
+            points_text = "-"
+
+        rows.append(
+            {
+                "Deltagare": participant_name_by_id.get(
+                    participant_id,
+                    "Okänd deltagare",
+                ),
+                "Resultat": tip_text,
+                "Över/under": goals_text,
+                "Första målskytt": first_scorer_text,
+                "Poäng": points_text,
+            }
+        )
+
+    st.dataframe(
+        rows,
+        width="stretch",
+        hide_index=True,
+    )
+
 def render_knockout_matches_overview() -> None:
     """
     Visar slutspelsmatcher för deltagaren.
 
-    Detta är en read-only översikt över matcher och resultat.
+    Detta är en read-only översikt över matcher, resultat och allas tips
+    när rundan är låst.
     """
 
     matches = get_knockout_matches()
@@ -428,12 +531,20 @@ def render_knockout_matches_overview() -> None:
     if not matches:
         st.info("Inga slutspelsmatcher är inlagda ännu.")
         return
+    
+    st.caption(
+        "Allas tips visas per match när respektive runda är låst."
+    )
+
+    participants = get_active_participants()
+    all_predictions = get_all_knockout_predictions()
 
     last_round_name = None
 
     for match in matches:
         round_info = match.get("knockout_rounds") or {}
         round_name = round_info.get("name", "Okänd runda")
+        round_status = round_info.get("status", "not_started")
 
         if round_name != last_round_name:
             st.subheader(round_name)
@@ -441,26 +552,49 @@ def render_knockout_matches_overview() -> None:
 
         kickoff_at = match.get("kickoff_at")
 
+        kickoff_text = (
+            format_datetime_swedish(kickoff_at)
+            if kickoff_at
+            else "Avspark ej satt"
+        )
+
         with st.container(border=True):
             st.caption(
-                f"Match {match['match_no']}"
+                f"Match {match['match_no']} · {kickoff_text}"
             )
 
             st.markdown(
                 f"### {format_knockout_match_result_text(match)}"
             )
 
-            if kickoff_at:
-                st.caption(
-                    f"Avspark: {format_datetime_swedish(kickoff_at)} svensk tid"
-                )
-            else:
-                st.caption("Avspark: ej satt")
-
             if is_finished_knockout_match(match):
-                st.success("Resultat efter fulltid är ifyllt.")
+                actual_first_scorer = match.get("first_scorer")
+
+                if actual_first_scorer:
+                    st.markdown(f"**Första målskytt:** {actual_first_scorer}")
             else:
                 st.info("Resultat är inte ifyllt ännu.")
+
+            round_deadline_at = round_info.get("deadline_at")
+
+            round_deadline_passed = (
+                is_deadline_passed(round_deadline_at)
+                if round_deadline_at
+                else False
+            )
+
+            round_is_public = (
+                round_status in {"locked", "finished"}
+                or round_deadline_passed
+            )
+
+            if round_is_public:
+                with st.expander("Visa allas tips på matchen"):
+                    render_all_knockout_predictions_for_match(
+                        match=match,
+                        participants=participants,
+                        predictions=all_predictions,
+                    )
 
 def render_locked_knockout_prediction_card(
     match: dict,
