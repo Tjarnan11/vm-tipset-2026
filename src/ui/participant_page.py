@@ -429,10 +429,10 @@ def render_participant_page(token: str) -> None:
         tab_rules,
     ) = st.tabs(
         [
-            "📝 Mina tips",
-            "📊 Poängtabell",
-            "🧾 Allas tips",
-            "📅 Matcher & resultat",
+            "📝 Gruppspelstips",
+            "📊 Gruppspelstabell",
+            "🧾 Allas gruppspelstips",
+            "📅 Gruppspel matcher",
             "🏆 Slutspel",
             "ℹ️ Regler",
         ]

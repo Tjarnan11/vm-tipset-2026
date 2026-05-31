@@ -36,7 +36,7 @@ def render_leaderboard_section() -> None:
     Det minskar risken för att poängtabellen blir fel eller inaktuell.
     """
 
-    st.header("Poängtabell")
+    st.header("Gruppspel – Poängtabell")
 
     participants = get_active_participants()
     matches = get_matches()
@@ -107,7 +107,7 @@ def render_public_predictions_overview_section() -> None:
     Den här funktionen ska bara visas efter deadline.
     """
 
-    st.header("Allas tips")
+    st.header("Allas gruppspelstips")
 
     participants = get_active_participants()
     matches = get_matches()
