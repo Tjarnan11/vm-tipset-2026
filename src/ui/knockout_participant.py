@@ -304,6 +304,110 @@ def render_knockout_rules_section() -> None:
         """
     )
 
+def render_saved_knockout_predictions_section(
+    participant: dict,
+) -> None:
+    """
+    Visar en read-only-sammanfattning av deltagarens sparade slutspelstips.
+
+    Syftet är att deltagaren tydligt ska kunna kontrollera vad som faktiskt
+    ligger sparat i databasen.
+    """
+
+    st.subheader("Sparade slutspelstips")
+
+    participant_id = participant["id"]
+
+    rounds = get_knockout_rounds()
+    matches = get_knockout_matches()
+    predictions = get_knockout_predictions_for_participant(participant_id)
+
+    predictions_by_match_id = {
+        prediction["match_id"]: prediction
+        for prediction in predictions
+    }
+
+    total_matches = len(matches)
+    saved_count = len(predictions)
+
+    st.metric("Sparade slutspelstips", f"{saved_count}/{total_matches}")
+
+    if not predictions:
+        st.info("Du har inga sparade slutspelstips ännu.")
+        return
+
+    st.caption(
+        "Detta är en sammanfattning av de slutspelstips som just nu är sparade. "
+        "Om du ändrar något i tipsformuläret behöver du trycka på Spara "
+        "innan det syns här."
+    )
+
+    view_filter = st.radio(
+        "Visa",
+        options=["Endast tippade matcher", "Alla matcher"],
+        horizontal=True,
+        key="saved_knockout_predictions_filter",
+    )
+
+    round_name_by_id = {
+        knockout_round["id"]: knockout_round["name"]
+        for knockout_round in rounds
+    }
+
+    last_round_name = None
+
+    for match in matches:
+        prediction = predictions_by_match_id.get(match["id"])
+
+        if view_filter == "Endast tippade matcher" and prediction is None:
+            continue
+
+        round_name = round_name_by_id.get(match["round_id"], "Okänd runda")
+
+        if round_name != last_round_name:
+            st.markdown(f"### {round_name}")
+            last_round_name = round_name
+
+        kickoff_at = match.get("kickoff_at")
+
+        kickoff_text = (
+            format_datetime_swedish(kickoff_at)
+            if kickoff_at
+            else "Avspark ej satt"
+        )
+
+        with st.container(border=True):
+            st.caption(
+                f"Match {match['match_no']} · {kickoff_text}"
+            )
+
+            st.markdown(
+                f"### {match['home_team']} – {match['away_team']}"
+            )
+
+            if prediction:
+                predicted_home_goals = prediction["predicted_home_goals"]
+                predicted_away_goals = prediction["predicted_away_goals"]
+
+                predicted_outcome = get_match_outcome(
+                    int(predicted_home_goals),
+                    int(predicted_away_goals),
+                )
+
+                st.markdown("**Ditt sparade tips:**")
+
+                st.markdown(
+                    f"### {predicted_home_goals}–{predicted_away_goals} "
+                    f"({predicted_outcome}) · "
+                    f"{format_goals_pick_label(prediction['goals_pick'])}"
+                )
+
+                first_scorer = prediction.get("first_scorer_pick") or "-"
+
+                st.markdown("**Första målskytt:**")
+                st.markdown(first_scorer)
+            else:
+                st.info("Inget sparat tips på denna match.")
 
 def render_knockout_matches_overview() -> None:
     """
@@ -700,7 +804,6 @@ def render_knockout_round_prediction_form(
             f"Slutspelstips sparade för {len(saved_predictions)} matcher."
         )
 
-
 def render_knockout_participant_section(
     participant: dict,
 ) -> None:
@@ -724,6 +827,7 @@ def render_knockout_participant_section(
     (
         tab_rounds,
         tab_predictions,
+        tab_saved_predictions,
         tab_final,
         tab_matches,
         tab_leaderboard,
@@ -732,6 +836,7 @@ def render_knockout_participant_section(
         [
             "🏆 Rundor",
             "📝 Tippa",
+            "✅ Sparade tips",
             "🏁 Finaltips",
             "📅 Matcher",
             "📊 Tabell",
@@ -765,6 +870,9 @@ def render_knockout_participant_section(
             participant=participant,
             knockout_round=selected_round,
         )
+
+    with tab_saved_predictions:
+        render_saved_knockout_predictions_section(participant)
 
     with tab_final:
         render_knockout_final_prediction_section(participant)
