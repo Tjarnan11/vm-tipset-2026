@@ -7,6 +7,7 @@
 # - hanterar sparande av tips
 
 import streamlit as st
+import pandas as pd
 
 from src.deadline import (
     format_deadline_swedish,
@@ -31,7 +32,9 @@ from src.time_utils import (
     format_datetime_swedish,
 )
 from src.ui.bonus import render_bonus_prediction_section
+from src.repositories.bonus_repo import get_bonus_prediction_for_participant
 from src.ui.formatting import (
+    dataframe_to_csv_bytes,
     format_goals_pick_label,
     format_match_result_text,
 )
@@ -111,6 +114,74 @@ def render_locked_prediction_card(
         f"{score['goals_points']}p för över/under"
     )
 
+def render_my_group_stage_export_section(
+    participant: dict,
+) -> None:
+    """
+    Låter deltagaren exportera sina egna gruppspelstips.
+
+    Exporten innehåller bara den aktuella deltagarens tips.
+    Den visar inte andra deltagares tips.
+    """
+
+    st.subheader("Exportera mina tips")
+
+    participant_id = participant["id"]
+
+    matches = get_matches()
+    predictions = get_predictions_for_participant(participant_id)
+    bonus_prediction = get_bonus_prediction_for_participant(participant_id)
+
+    predictions_by_match_id = {
+        prediction["match_id"]: prediction
+        for prediction in predictions
+    }
+
+    bonus_scorer = (
+        bonus_prediction["scorer_name"]
+        if bonus_prediction
+        else ""
+    )
+
+    rows = []
+
+    for match in matches:
+        prediction = predictions_by_match_id.get(match["id"])
+
+        if prediction:
+            outcome_pick = prediction["outcome_pick"]
+            goals_pick = format_goals_pick_label(prediction["goals_pick"])
+        else:
+            outcome_pick = ""
+            goals_pick = ""
+
+        rows.append(
+            {
+                "Deltagare": participant["display_name"],
+                "Match": match["match_no"],
+                "Grupp": match["group_name"],
+                "Avspark": format_datetime_swedish(match["kickoff_at"]),
+                "Lag 1": match["home_team"],
+                "Lag 2": match["away_team"],
+                "1/X/2": outcome_pick,
+                "Över/under": goals_pick,
+                "Utslagsfråga spelare": bonus_scorer,
+            }
+        )
+
+    tips_df = pd.DataFrame(rows)
+
+    st.caption(
+        "CSV-filen innehåller dina egna gruppspelstips och ditt svar på utslagsfrågan."
+    )
+
+    st.download_button(
+        label="Ladda ner mina gruppspelstips som CSV",
+        data=dataframe_to_csv_bytes(tips_df),
+        file_name="mina_gruppspelstips.csv",
+        mime="text/csv",
+        key=f"download_my_group_stage_tips_{participant_id}",
+    )
 
 def render_predictions_form(
     participant: dict,
@@ -211,20 +282,41 @@ def render_predictions_form(
     match_ids_to_delete = []
     incomplete_rows = []
 
+    if predictions_locked:
+        st.subheader("Dina tips")
+
+        last_date_heading = None
+
+        for match in matches_to_render:
+            match_id = match["id"]
+            existing = predictions_by_match_id.get(match_id)
+
+            date_heading = format_date_swedish(match["kickoff_at"])
+
+            if date_heading != last_date_heading:
+                st.markdown(f"### {date_heading}")
+                last_date_heading = date_heading
+
+            with st.container(border=True):
+                render_locked_prediction_card(
+                    match=match,
+                    existing_prediction=existing,
+                )
+
+        return
+
+
     with st.form("predictions_form", border=False):
         st.subheader("Dina tips")
 
-        submitted_top = False
+        submitted_top = st.form_submit_button(
+            "Spara ändringar",
+            key="save_predictions_top",
+        )
 
-        if not predictions_locked:
-            submitted_top = st.form_submit_button(
-                "Spara ändringar",
-                key="save_predictions_top",
-            )
-
-            st.caption(
-                "Tipsen sparas först när du trycker på Spara ändringar."
-            )
+        st.caption(
+            "Tipsen sparas först när du trycker på Spara ändringar."
+        )
 
     
 
@@ -241,12 +333,7 @@ def render_predictions_form(
                 last_date_heading = date_heading
 
             with st.container(border=True):
-                if predictions_locked:
-                    render_locked_prediction_card(
-                        match=match,
-                        existing_prediction=existing,
-                    )
-                    continue
+                
 
                 st.markdown(
                     f"**Match {match['match_no']} · Grupp {match['group_name']}**"
@@ -318,13 +405,10 @@ def render_predictions_form(
             # Lite luft mellan korten.
             st.write("")
 
-        submitted_bottom = False
-
-        if not predictions_locked:
-            submitted_bottom = st.form_submit_button(
-                "Spara ändringar",
-                key="save_predictions_bottom",
-            ) 
+        submitted_bottom = st.form_submit_button(
+            "Spara ändringar",
+            key="save_predictions_bottom",
+        )
 
     submitted = submitted_top or submitted_bottom
 
@@ -412,11 +496,6 @@ def render_participant_page(token: str) -> None:
     st.title("⚽ VM-tipset 2026")
     st.success(f"Välkommen, {participant['display_name']}!")
 
-    st.info(
-        "Din privata länk fungerar. "
-        "Nästa steg blir att visa matcher och låta dig lägga tips."
-    )
-
     deadline_value = get_group_stage_deadline()
     predictions_locked = is_deadline_passed(deadline_value)
 
@@ -439,6 +518,8 @@ def render_participant_page(token: str) -> None:
     )
 
     with tab_tips:
+        st.header("Gruppspelstips")
+
         st.info(
             "Deadline: "
             f"{format_deadline_swedish(deadline_value)} svensk tid"
@@ -449,12 +530,14 @@ def render_participant_page(token: str) -> None:
             predictions_locked=predictions_locked,
         )
 
-        st.divider()
-
         render_predictions_form(
             participant=participant,
             predictions_locked=predictions_locked,
         )
+
+        st.divider()
+
+        render_my_group_stage_export_section(participant)
 
     with tab_leaderboard:
         if predictions_locked:
