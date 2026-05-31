@@ -703,22 +703,15 @@ def render_knockout_team_update_form() -> None:
         else:
             st.error("Kunde inte uppdatera lagen.")
 
-def render_knockout_admin_section() -> None:
-    """
-    Adminsektion för slutspelstipset.
 
-    Första versionen:
-    - visar slutspelsrundor
-    - låter admin sätta deadline per runda
-    - låter admin ändra status per runda
+def render_knockout_rounds_admin_section() -> None:
+    """
+    Adminsektion för slutspelsrundor.
+
+    Visar slutspelsrundor och låter admin uppdatera deadline/status.
     """
 
-    st.header("Slutspel")
-
-    st.info(
-        "Slutspelstipset är under uppbyggnad. "
-        "Här börjar vi med att hantera rundor och deadlines."
-    )
+    st.subheader("Slutspelsrundor")
 
     rounds = get_knockout_rounds()
 
@@ -745,8 +738,6 @@ def render_knockout_admin_section() -> None:
         )
 
     rounds_df = pd.DataFrame(rows)
-
-    st.subheader("Rundor")
 
     st.dataframe(
         rounds_df,
@@ -826,34 +817,83 @@ def render_knockout_admin_section() -> None:
         else:
             st.error("Kunde inte uppdatera slutspelsrundan.")
 
-    st.divider()
 
-    st.subheader("Slutspelsmatcher")
 
-    render_knockout_matches_table()
+def render_knockout_admin_section() -> None:
+    """
+    Adminsektion för slutspelstipset.
 
-    st.divider()
+    Slutspelsadmin är uppdelad i interna flikar för att undvika
+    en lång sida med många rubriker.
+    """
 
-    render_knockout_csv_import_section()
+    st.header("Slutspel")
 
-    render_knockout_team_update_form()
+    st.info(
+        "Här hanteras slutspelstipset: rundor, matcher, resultat, "
+        "målskyttsbedömning, finaltips och slutspelstabell."
+    )
 
-    st.divider()
+    (
+        tab_overview,
+        tab_rounds,
+        tab_matches,
+        tab_results,
+        tab_first_scorer,
+        tab_final,
+        tab_leaderboard,
+    ) = st.tabs(
+        [
+            "🏠 Översikt",
+            "⏰ Rundor",
+            "📅 Matcher",
+            "✍️ Resultat",
+            "⚽ Målskytt",
+            "🏁 Final",
+            "📊 Tabell",
+        ]
+    )
 
-    render_knockout_result_admin_section()
+    with tab_overview:
+        st.subheader("Slutspelsöversikt")
 
-    st.divider()
+        rounds = get_knockout_rounds()
+        matches = get_knockout_matches()
 
-    render_first_scorer_admin_section()
+        st.metric("Slutspelsrundor", len(rounds))
+        st.metric("Slutspelsmatcher", len(matches))
 
-    st.divider()
+        st.caption(
+            "Tips öppnas per runda. En runda är tippbar när status är "
+            "`open` och deadline ligger i framtiden."
+        )
 
-    render_knockout_final_admin_section()
+    with tab_rounds:
+        render_knockout_rounds_admin_section()
 
-    st.divider()
+    with tab_matches:
+        render_knockout_matches_table()
 
-    render_knockout_final_review_admin_section()
+        st.divider()
 
-    st.divider()
+        render_knockout_csv_import_section()
 
-    render_knockout_leaderboard_section()
+        st.divider()
+
+        render_knockout_team_update_form()
+
+    with tab_results:
+        render_knockout_result_admin_section()
+
+    with tab_first_scorer:
+        render_first_scorer_admin_section()
+
+    with tab_final:
+        render_knockout_final_admin_section()
+
+        st.divider()
+
+        render_knockout_final_review_admin_section()
+
+    with tab_leaderboard:
+        render_knockout_leaderboard_section()
