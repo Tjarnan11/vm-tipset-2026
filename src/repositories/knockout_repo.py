@@ -74,7 +74,7 @@ def get_knockout_matches() -> list[dict]:
             "id, round_id, match_no, kickoff_at, home_team, away_team, "
             "home_placeholder, away_placeholder, first_scorer, "
             "home_goals_ft, away_goals_ft, status, created_at, "
-            "knockout_rounds(name, sort_order)"
+            "knockout_rounds(name, sort_order, status, deadline_at)"
         )
         .order("match_no")
         .execute()
