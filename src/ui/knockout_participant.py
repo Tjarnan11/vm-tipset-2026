@@ -498,7 +498,8 @@ def render_knockout_round_prediction_form(
     if round_is_open:
         st.success("Rundan är öppen för tips.")
         st.caption(
-            "Alla matcher i rundan behöver ha över/under valt innan du kan spara."
+            "Du kan spara de matcher du har fyllt i. "
+            "Helt tomma matcher lämnas osparade och kan fyllas i senare."
         )
     else:
         st.warning("Rundan är inte öppen för ändringar.")
@@ -523,6 +524,7 @@ def render_knockout_round_prediction_form(
 
     predictions_to_save = []
     incomplete_matches = []
+    invalid_goal_matches = []
 
     with st.form(f"knockout_predictions_form_{round_id}"):
         for match in matches:
@@ -547,33 +549,29 @@ def render_knockout_round_prediction_form(
                     st.caption("Avspark: ej satt")
 
                 existing_home_goals = (
-                    int(existing["predicted_home_goals"])
+                    str(existing["predicted_home_goals"])
                     if existing and existing["predicted_home_goals"] is not None
-                    else 0
+                    else ""
                 )
 
                 existing_away_goals = (
-                    int(existing["predicted_away_goals"])
+                    str(existing["predicted_away_goals"])
                     if existing and existing["predicted_away_goals"] is not None
-                    else 0
+                    else ""
                 )
 
                 col1, col2 = st.columns(2)
 
                 with col1:
-                    predicted_home_goals = st.number_input(
+                    predicted_home_goals_text = st.text_input(
                         f"Mål {match['home_team']}",
-                        min_value=0,
-                        step=1,
                         value=existing_home_goals,
                         key=f"ko_home_{match['id']}",
                     )
 
                 with col2:
-                    predicted_away_goals = st.number_input(
+                    predicted_away_goals_text = st.text_input(
                         f"Mål {match['away_team']}",
-                        min_value=0,
-                        step=1,
                         value=existing_away_goals,
                         key=f"ko_away_{match['id']}",
                     )
@@ -611,30 +609,83 @@ def render_knockout_round_prediction_form(
                 )
 
                 goals_pick = goals_label_to_value[goals_label]
+                first_scorer_cleaned = first_scorer_pick.strip()
 
-                if goals_pick is None:
+                home_goals_is_filled = predicted_home_goals_text.strip() != ""
+                away_goals_is_filled = predicted_away_goals_text.strip() != ""
+                goals_pick_is_filled = goals_pick is not None
+                first_scorer_is_filled = first_scorer_cleaned != ""
+
+                match_has_any_input = (
+                    home_goals_is_filled
+                    or away_goals_is_filled
+                    or goals_pick_is_filled
+                    or first_scorer_is_filled
+                )
+
+                match_is_complete = (
+                    home_goals_is_filled
+                    and away_goals_is_filled
+                    and goals_pick_is_filled
+                )
+
+                if not match_has_any_input:
+                    # Helt tom match: spara inget, men varna inte heller.
+                    continue
+
+                if not match_is_complete:
                     incomplete_matches.append(match["match_no"])
-                else:
-                    predictions_to_save.append(
-                        {
-                            "match_id": match["id"],
-                            "predicted_home_goals": int(predicted_home_goals),
-                            "predicted_away_goals": int(predicted_away_goals),
-                            "goals_pick": goals_pick,
-                            "first_scorer_pick": first_scorer_pick.strip(),
-                        }
-                    )
+                    continue
+
+                try:
+                    predicted_home_goals = int(predicted_home_goals_text)
+                    predicted_away_goals = int(predicted_away_goals_text)
+                except ValueError:
+                    invalid_goal_matches.append(match["match_no"])
+                    continue
+
+                if predicted_home_goals < 0 or predicted_away_goals < 0:
+                    invalid_goal_matches.append(match["match_no"])
+                    continue
+
+                predictions_to_save.append(
+                    {
+                        "match_id": match["id"],
+                        "predicted_home_goals": predicted_home_goals,
+                        "predicted_away_goals": predicted_away_goals,
+                        "goals_pick": goals_pick,
+                        "first_scorer_pick": first_scorer_cleaned,
+                    }
+                )
 
         submitted = st.form_submit_button("Spara slutspelstips")
 
     if submitted:
-        if incomplete_matches:
-            st.error(
-                "Vissa matcher saknar över/under-val: "
-                f"{', '.join(map(str, incomplete_matches))}"
+        if invalid_goal_matches:
+            error_message = (
+                "Vissa matcher har ogiltiga mål. "
+                "Målfälten får bara innehålla heltal, till exempel 0, 1, 2 eller 3. "
+                f"Kontrollera match: {', '.join(map(str, invalid_goal_matches))}"
             )
+
+            st.toast(error_message, icon="⚠️")
+            st.error(error_message)
+            return
+        
+        if incomplete_matches:
+            error_message = (
+                "Vissa matcher är påbörjade men inte kompletta. "
+                "Fyll i båda mål-fälten och över/under, eller lämna matchen helt tom. "
+                f"Kontrollera match: {', '.join(map(str, incomplete_matches))}"
+            )
+
+            st.toast(error_message, icon="⚠️")
+            st.error(error_message)
             return
 
+        if not predictions_to_save:
+            st.info("Inga kompletta slutspelstips att spara ännu.")
+            return
         saved_predictions = save_knockout_predictions(
             participant_id=participant_id,
             predictions=predictions_to_save,
