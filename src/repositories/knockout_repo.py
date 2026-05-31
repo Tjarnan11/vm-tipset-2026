@@ -72,6 +72,7 @@ def get_knockout_matches() -> list[dict]:
         supabase.table("knockout_matches")
         .select(
             "id, round_id, match_no, kickoff_at, home_team, away_team, "
+            "home_placeholder, away_placeholder, "
             "home_goals_ft, away_goals_ft, status, created_at, "
             "knockout_rounds(name, sort_order)"
         )
@@ -93,6 +94,7 @@ def get_knockout_matches_for_round(round_id: str) -> list[dict]:
         supabase.table("knockout_matches")
         .select(
             "id, round_id, match_no, kickoff_at, home_team, away_team, "
+            "home_placeholder, away_placeholder, "
             "home_goals_ft, away_goals_ft, status, created_at"
         )
         .eq("round_id", round_id)

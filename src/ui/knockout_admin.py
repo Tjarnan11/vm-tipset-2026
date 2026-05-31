@@ -68,6 +68,8 @@ def render_knockout_matches_table() -> None:
                     if kickoff_at
                     else "-"
                 ),
+                "Struktur lag 1": match.get("home_placeholder") or "",
+                "Struktur lag 2": match.get("away_placeholder") or "",
                 "Lag 1": match["home_team"],
                 "Lag 2": match["away_team"],
                 "FT lag 1": match["home_goals_ft"],
@@ -167,6 +169,8 @@ def render_knockout_match_form() -> None:
                 "kickoff_at": kickoff_iso,
                 "home_team": cleaned_home_team,
                 "away_team": cleaned_away_team,
+                "home_placeholder": cleaned_home_team,
+                "away_placeholder": cleaned_away_team,
                 "status": "scheduled",
             }
         )
@@ -343,6 +347,23 @@ def render_knockout_result_admin_section() -> None:
     selected_match = next(
         match for match in matches
         if match["id"] == selected_match_id
+    )
+
+    home_placeholder = (
+        selected_match.get("home_placeholder")
+        or selected_match.get("home_team")
+        or "-"
+    )
+
+    away_placeholder = (
+        selected_match.get("away_placeholder")
+        or selected_match.get("away_team")
+        or "-"
+    )
+
+    st.info(
+        "Originalstruktur: "
+        f"{home_placeholder} – {away_placeholder}"
     )
 
     st.markdown(

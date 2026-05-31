@@ -1254,6 +1254,8 @@ def render_knockout_export_section() -> None:
                     round_name_by_id.get(match["round_id"], "-"),
                 ),
                 "Avspark": match.get("kickoff_at"),
+                "Struktur lag 1": match.get("home_placeholder") or "",
+                "Struktur lag 2": match.get("away_placeholder") or "",
                 "Lag 1": match["home_team"],
                 "Lag 2": match["away_team"],
                 "Fulltid lag 1": match.get("home_goals_ft"),
