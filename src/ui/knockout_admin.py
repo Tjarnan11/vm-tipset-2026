@@ -16,14 +16,15 @@ from src.deadline import (
 
 from src.repositories.knockout_repo import (
     clear_knockout_match_result,
+    get_all_knockout_predictions,
     get_knockout_matches,
     get_knockout_round_by_name,
     get_knockout_rounds,
+    update_first_scorer_correct,
     update_knockout_match_result,
+    update_knockout_match_teams,
     update_knockout_round,
     upsert_knockout_match,
-    get_all_knockout_predictions,
-    update_first_scorer_correct,
 )
 
 from src.time_utils import format_datetime_swedish
@@ -599,6 +600,88 @@ def render_first_scorer_admin_section() -> None:
         else:
             st.error("Kunde inte spara målskytt-bedömningen.")
 
+def render_knockout_team_update_form() -> None:
+    """
+    Formulär där admin kan ersätta placeholders med faktiska lag.
+
+    Detta ändrar bara:
+    - home_team
+    - away_team
+
+    Det ändrar inte:
+    - matchnummer
+    - runda
+    - avspark
+    - resultat
+    """
+
+    st.subheader("Uppdatera lag i slutspelsmatch")
+
+    matches = get_knockout_matches()
+
+    if not matches:
+        st.info("Inga slutspelsmatcher finns ännu.")
+        return
+
+    match_label_by_id = {}
+
+    for match in matches:
+        round_info = match.get("knockout_rounds") or {}
+        round_name = round_info.get("name", "Okänd runda")
+
+        match_label_by_id[match["id"]] = (
+            f"Match {match['match_no']} · {round_name} – "
+            f"{match['home_team']} vs {match['away_team']}"
+        )
+
+    selected_match_id = st.selectbox(
+        "Välj match",
+        options=list(match_label_by_id.keys()),
+        format_func=lambda match_id: match_label_by_id[match_id],
+        key="knockout_team_update_match_select",
+    )
+
+    selected_match = next(
+        match for match in matches
+        if match["id"] == selected_match_id
+    )
+
+    with st.form("knockout_team_update_form"):
+        home_team = st.text_input(
+            "Lag 1",
+            value=selected_match["home_team"],
+        )
+
+        away_team = st.text_input(
+            "Lag 2",
+            value=selected_match["away_team"],
+        )
+
+        submitted = st.form_submit_button("Spara lag")
+
+    if submitted:
+        cleaned_home_team = home_team.strip()
+        cleaned_away_team = away_team.strip()
+
+        if not cleaned_home_team or not cleaned_away_team:
+            st.error("Båda lagen måste fyllas i.")
+            return
+
+        updated_match = update_knockout_match_teams(
+            match_id=selected_match_id,
+            home_team=cleaned_home_team,
+            away_team=cleaned_away_team,
+        )
+
+        if updated_match:
+            st.success(
+                f"Match {selected_match['match_no']} uppdaterad: "
+                f"{cleaned_home_team} – {cleaned_away_team}"
+            )
+            st.info("Ladda om sidan för att se uppdateringen i tabellen.")
+        else:
+            st.error("Kunde inte uppdatera lagen.")
+
 def render_knockout_admin_section() -> None:
     """
     Adminsektion för slutspelstipset.
@@ -732,7 +815,7 @@ def render_knockout_admin_section() -> None:
 
     render_knockout_csv_import_section()
 
-    render_knockout_match_form()
+    render_knockout_team_update_form()
 
     st.divider()
 

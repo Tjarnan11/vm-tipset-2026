@@ -494,3 +494,34 @@ def update_knockout_final_prediction_review(
         return response.data[0]
 
     return None
+
+def update_knockout_match_teams(
+    match_id: str,
+    home_team: str,
+    away_team: str,
+) -> dict | None:
+    """
+    Uppdaterar bara lagen i en slutspelsmatch.
+
+    Används när placeholders ska ersättas med faktiska lag.
+    Ändrar inte avsparkstid, runda, matchnummer eller resultat.
+    """
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("knockout_matches")
+        .update(
+            {
+                "home_team": home_team,
+                "away_team": away_team,
+            }
+        )
+        .eq("id", match_id)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+
+    return None
