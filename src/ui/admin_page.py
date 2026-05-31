@@ -1214,7 +1214,11 @@ def render_knockout_export_section() -> None:
             {
                 "Runda": knockout_round["name"],
                 "Sortering": knockout_round["sort_order"],
-                "Deadline": knockout_round.get("deadline_at"),
+                "Deadline": (
+                    format_datetime_swedish(knockout_round.get("deadline_at"))
+                    if knockout_round.get("deadline_at")
+                    else ""
+                ),
                 "Status": knockout_round["status"],
             }
         )
@@ -1253,7 +1257,11 @@ def render_knockout_export_section() -> None:
                     "name",
                     round_name_by_id.get(match["round_id"], "-"),
                 ),
-                "Avspark": match.get("kickoff_at"),
+                "Avspark": (
+                    format_datetime_swedish(match.get("kickoff_at"))
+                    if match.get("kickoff_at")
+                    else ""
+                ),
                 "Struktur lag 1": match.get("home_placeholder") or "",
                 "Struktur lag 2": match.get("away_placeholder") or "",
                 "Lag 1": match["home_team"],
@@ -1311,7 +1319,11 @@ def render_knockout_export_section() -> None:
                 "Första målskytt rätt": prediction.get(
                     "first_scorer_correct"
                 ),
-                "Uppdaterad": prediction.get("updated_at"),
+                "Uppdaterad": (
+                    format_datetime_swedish(prediction.get("updated_at"))
+                    if prediction.get("updated_at")
+                    else ""
+                ),
             }
         )
 
@@ -1353,7 +1365,11 @@ def render_knockout_export_section() -> None:
                     "correct_finalists_count"
                 ),
                 "Vinnare rätt": final_prediction.get("winner_correct"),
-                "Uppdaterad": final_prediction.get("updated_at"),
+                "Uppdaterad": (
+                    format_datetime_swedish(final_prediction.get("updated_at"))
+                    if final_prediction.get("updated_at")
+                    else ""
+                ),
             }
         )
 
@@ -1386,7 +1402,11 @@ def render_knockout_export_section() -> None:
                     "Finalist 1": final_result.get("finalist_1") or "",
                     "Finalist 2": final_result.get("finalist_2") or "",
                     "Vinnare": final_result.get("winner") or "",
-                    "Uppdaterad": final_result.get("updated_at"),
+                    "Uppdaterad": (
+                        format_datetime_swedish(final_result.get("updated_at"))
+                        if final_result.get("updated_at")
+                        else ""
+                    ),
                 }
             ]
         )
