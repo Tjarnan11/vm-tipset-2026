@@ -49,6 +49,36 @@ def is_knockout_round_open_for_predictions(
 
     return not is_deadline_passed(deadline_at)
 
+def is_finished_knockout_match(match: dict) -> bool:
+    """
+    Kontrollerar om en slutspelsmatch har fulltidsresultat.
+    """
+
+    return (
+        match.get("status") == "finished"
+        and match.get("home_goals_ft") is not None
+        and match.get("away_goals_ft") is not None
+    )
+
+
+def format_knockout_match_result_text(match: dict) -> str:
+    """
+    Returnerar kompakt matchtext.
+
+    Om resultat finns:
+        Argentina 2–1 Frankrike
+
+    Annars:
+        Argentina – Frankrike
+    """
+
+    if is_finished_knockout_match(match):
+        return (
+            f"{match['home_team']} {match['home_goals_ft']}–"
+            f"{match['away_goals_ft']} {match['away_team']}"
+        )
+
+    return f"{match['home_team']} – {match['away_team']}"
 
 def render_knockout_rounds_overview() -> None:
     """
@@ -90,6 +120,8 @@ def render_knockout_rounds_overview() -> None:
 def render_knockout_matches_overview() -> None:
     """
     Visar slutspelsmatcher för deltagaren.
+
+    Detta är en read-only översikt över matcher och resultat.
     """
 
     matches = get_knockout_matches()
@@ -111,10 +143,12 @@ def render_knockout_matches_overview() -> None:
         kickoff_at = match.get("kickoff_at")
 
         with st.container(border=True):
-            st.markdown(f"**Match {match['match_no']}**")
+            st.caption(
+                f"Match {match['match_no']}"
+            )
 
             st.markdown(
-                f"### {match['home_team']} – {match['away_team']}"
+                f"### {format_knockout_match_result_text(match)}"
             )
 
             if kickoff_at:
@@ -124,15 +158,10 @@ def render_knockout_matches_overview() -> None:
             else:
                 st.caption("Avspark: ej satt")
 
-            if match["status"] == "finished":
-                st.success(
-                    f"Resultat efter fulltid: "
-                    f"{match['home_team']} {match['home_goals_ft']}–"
-                    f"{match['away_goals_ft']} {match['away_team']}"
-                )
+            if is_finished_knockout_match(match):
+                st.success("Resultat efter fulltid är ifyllt.")
             else:
-                st.info("Resultat: ej ifyllt ännu")
-
+                st.info("Resultat är inte ifyllt ännu.")
 
 def render_read_only_knockout_round_predictions(
     matches: list[dict],
@@ -142,21 +171,20 @@ def render_read_only_knockout_round_predictions(
     Visar slutspelstips i read-only-läge.
 
     Används när rundan inte är öppen för ändringar.
-    Viktigt: här använder vi inte st.form, eftersom ett form utan submit-knapp
-    ger Streamlit-varning.
     """
 
     for match in matches:
         existing = predictions_by_match_id.get(match["id"])
+        kickoff_at = match.get("kickoff_at")
 
         with st.container(border=True):
-            st.markdown(f"**Match {match['match_no']}**")
-
-            st.markdown(
-                f"### {match['home_team']} – {match['away_team']}"
+            st.caption(
+                f"Match {match['match_no']}"
             )
 
-            kickoff_at = match.get("kickoff_at")
+            st.markdown(
+                f"### {format_knockout_match_result_text(match)}"
+            )
 
             if kickoff_at:
                 st.caption(
@@ -177,7 +205,6 @@ def render_read_only_knockout_round_predictions(
                 st.markdown(f"**Första målskytt:** {first_scorer}")
             else:
                 st.info("Du har inget sparat tips på denna match.")
-
 
 def render_knockout_round_prediction_form(
     participant: dict,
@@ -255,7 +282,9 @@ def render_knockout_round_prediction_form(
             existing = predictions_by_match_id.get(match["id"])
 
             with st.container(border=True):
-                st.markdown(f"**Match {match['match_no']}**")
+                st.caption(
+                    f"Match {match['match_no']}"
+                )
 
                 st.markdown(
                     f"### {match['home_team']} – {match['away_team']}"
