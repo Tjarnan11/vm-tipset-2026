@@ -316,6 +316,17 @@ def render_saved_knockout_predictions_section(
 
     st.subheader("Sparade slutspelstips")
 
+    st.info(
+        "Här ser du de slutspelstips som faktiskt är sparade i databasen. "
+        "Detta är en kontrollvy. Om du ändrar något under Tips & resultat "
+        "behöver du trycka på Spara innan ändringen syns här."
+    )
+
+    st.caption(
+        "När en runda är låst visas dina resultat och poäng per match under "
+        "fliken Tips & resultat."
+    )
+
     participant_id = participant["id"]
 
     rounds = get_knockout_rounds()
@@ -336,11 +347,7 @@ def render_saved_knockout_predictions_section(
         st.info("Du har inga sparade slutspelstips ännu.")
         return
 
-    st.caption(
-        "Detta är en sammanfattning av de slutspelstips som just nu är sparade. "
-        "Om du ändrar något i tipsformuläret behöver du trycka på Spara "
-        "innan det syns här."
-    )
+    st.caption("Tipsen nedan är hämtade från det som är sparat just nu.")
 
     view_filter = st.radio(
         "Visa",
@@ -835,7 +842,7 @@ def render_knockout_participant_section(
     ) = st.tabs(
         [
             "🏆 Rundor",
-            "📝 Tippa",
+            "📝 Tips & resultat",
             "✅ Sparade tips",
             "🏁 Finaltips",
             "📅 Matcher",
