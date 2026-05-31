@@ -55,6 +55,18 @@ docs/knockout_design.md
 
 Denna checklista används innan VM-tipset skickas ut till riktiga deltagare.
 
+Rekommenderat arbetssätt:
+
+1. Kör först en generalrepetition med testdeltagare.
+2. Kontrollera att cleanup, länkar, sparning och adminstatus fungerar.
+3. Kör cleanup igen.
+4. Skapa riktiga deltagare.
+5. Skicka riktiga länkar.
+
+Viktigt: kör inte cleanup efter att riktiga deltagare har börjat lägga tips.
+
+---
+
 ### 1. Kontrollera deployad app
 
 Öppna den deployade Streamlit-appen och kontrollera adminöversikten.
@@ -72,12 +84,14 @@ Lokalt kan `base_url` visa `localhost`, men i den deployade appen ska den peka p
 
 ---
 
-### 2. Rensa testdata
+### 2. Rensa gruppspels-testdata
 
 Kör detta i Supabase SQL Editor innan riktiga deltagare skapas.
 
 ```sql
 delete from public.predictions;
+delete from public.bonus_predictions;
+delete from public.bonus_scorer_results;
 delete from public.participants;
 
 update public.matches
@@ -89,23 +103,61 @@ set
 
 Detta gör:
 
-- tar bort alla testtips
+- tar bort alla gruppspelstips
+- tar bort alla gruppspels-bonusval
+- tar bort gamla bonusmål för utslagsfrågan
 - tar bort alla testdeltagare
-- rensar alla testresultat
-- behåller matcherna
+- rensar alla gruppspelsresultat
+- behåller gruppspelsmatcherna
 - behåller app settings, till exempel deadline
 
 Viktigt: kör inte detta efter att riktiga deltagare har börjat lägga tips.
 
 ---
 
-### 3. Kontrollera matcher
+### 3. Kontrollera databasen efter cleanup
+
+Kör dessa kontroller i Supabase SQL Editor:
+
+```sql
+select count(*) as predictions_count from public.predictions;
+select count(*) as bonus_predictions_count from public.bonus_predictions;
+select count(*) as bonus_scorer_results_count from public.bonus_scorer_results;
+select count(*) as participants_count from public.participants;
+```
+
+Efter cleanup bör alla dessa vara `0`.
+
+Kontrollera sedan att matcherna finns kvar:
+
+```sql
+select count(*) as matches_count
+from public.matches;
+```
+
+Det ska vara `72`.
+
+Kontrollera också att inga resultat finns kvar:
+
+```sql
+select count(*) as finished_matches_count
+from public.matches
+where status = 'finished'
+   or home_goals is not null
+   or away_goals is not null;
+```
+
+Det ska vara `0`.
+
+---
+
+### 4. Kontrollera matcher
 
 Efter rensning, kontrollera att matcherna fortfarande finns kvar.
 
 I admin:
 
-- öppna fliken `Matcher`
+- öppna `Matcher`
 - kontrollera att det finns 72 matcher
 - kontrollera att tider visas i svensk tid
 - kontrollera att lagen och grupperna ser rimliga ut
@@ -114,7 +166,7 @@ Om matcher behöver importeras igen, använd CSV-importen i admin.
 
 ---
 
-### 4. Sätt riktig deadline
+### 5. Sätt riktig deadline
 
 I adminöversikten:
 
@@ -132,11 +184,174 @@ Det exakta valet beror på när du vill låsa tävlingen.
 
 ---
 
-### 5. Skapa riktiga deltagare
+### 6. Skapa testdeltagare för generalrepetition
+
+Innan riktiga länkar skickas, skapa gärna 1–2 testdeltagare från den deployade admin-sidan.
+
+Kontrollera:
+
+- länken använder deployad Streamlit-URL, inte localhost
+- deltagaren syns i deltagarstatus
+- deltagaren har `0/72` tippade matcher
+- bonusfråga visas som saknas/ej ifylld
+
+Exempel på deployad deltagarlänk:
+
+```text
+https://din-app.streamlit.app?token=...
+```
+
+---
+
+### 7. Testa deltagarflödet från deployad app
+
+Öppna testdeltagarens länk på mobil eller i inkognito.
+
+Testa:
+
+- sidan öppnas utan admin-alternativ
+- deadline visas rätt
+- tipsen är öppna
+- lägg 2–5 tips
+- lägg bonusfråga
+- tryck spara
+- ladda om sidan
+- kontrollera att tipsen ligger kvar
+- kontrollera att status visar rätt antal, till exempel `5/72`
+
+Kontrollera också i Supabase:
+
+```sql
+select *
+from public.predictions
+order by updated_at desc
+limit 20;
+```
+
+Efter sparning ska tips finnas i tabellen.
+
+---
+
+### 8. Kontrollera adminstatus efter deltagartest
+
+Tillbaka i admin:
+
+- deltagarstatus visar rätt antal tippade matcher
+- utslagsfråga visas som ifylld
+- admin ska inte se vald bonusspelare före deadline
+- poängtabellen ska inte visa poäng om inga resultat är inlagda
+- bonusmål ska inte innehålla gamla testvärden
+
+Om bonusmål ser fel ut, kontrollera att denna tabell är rensad:
+
+```sql
+select *
+from public.bonus_scorer_results;
+```
+
+---
+
+### 9. Testa deadline-låsning
+
+Sätt deadline till dåtid tillfälligt.
+
+Kontrollera från deltagarlänk:
+
+- tipsen kan inte ändras
+- låsta matchkort visas i stället för dropdowns
+- poängtabell visas
+- allas tips visas
+
+Kontrollera från admin:
+
+- bonusval kan visas efter deadline
+- bonusmål kan uppdateras
+- export av alla tips blir tillgänglig
+
+Sätt deadline tillbaka till framtid om du ska fortsätta testa.
+
+---
+
+### 10. Testa resultat och poäng
+
+Med deadline i dåtid:
+
+- fyll i resultat på 1–2 matcher
+- kontrollera att deltagarens poäng uppdateras
+- kontrollera `Matcher & resultat`
+- kontrollera `Allas tips`
+- kontrollera poängtabellen
+- rensa resultat igen och kontrollera att poängen försvinner
+
+Poäng räknas automatiskt:
+
+- 1 poäng för rätt 1/X/2
+- 1 poäng för rätt över/under 2,5 mål
+
+---
+
+### 11. Testa exporter
+
+Testa minst:
+
+- deltagarlänkar-export
+- deltagarstatus-export
+- poängtabell-export
+- matcher/resultat-export
+- alla tips-export efter deadline
+
+Du behöver inte granska varje CSV i detalj, men kontrollera att filerna laddas ner och inte kraschar.
+
+Export av alla tips är låst fram till deadline.
+
+---
+
+### 12. Kör cleanup igen efter generalrepetition
+
+När generalrepetitionen är klar, kör gruppspels-cleanup igen innan riktiga deltagare skapas:
+
+```sql
+delete from public.predictions;
+delete from public.bonus_predictions;
+delete from public.bonus_scorer_results;
+delete from public.participants;
+
+update public.matches
+set
+    home_goals = null,
+    away_goals = null,
+    status = 'scheduled';
+```
+
+Kontrollera sedan igen:
+
+```sql
+select count(*) as predictions_count from public.predictions;
+select count(*) as bonus_predictions_count from public.bonus_predictions;
+select count(*) as bonus_scorer_results_count from public.bonus_scorer_results;
+select count(*) as participants_count from public.participants;
+
+select count(*) as matches_count
+from public.matches;
+
+select count(*) as finished_matches_count
+from public.matches
+where status = 'finished'
+   or home_goals is not null
+   or away_goals is not null;
+```
+
+---
+
+### 13. Skapa riktiga deltagare
 
 Skapa riktiga deltagare från den deployade admin-sidan.
 
-Viktigt: skapa eller kopiera länkar från deployad app, inte från lokal app.
+Viktigt:
+
+- skapa eller kopiera länkar från deployad app
+- inte från lokal app
+- kontrollera att varje deltagare får rätt länk
 
 Varje deltagare får en privat länk i formatet:
 
@@ -146,7 +361,7 @@ https://din-app.streamlit.app?token=...
 
 ---
 
-### 6. Exportera deltagarlänkar
+### 14. Exportera deltagarlänkar
 
 I admin:
 
@@ -159,27 +374,11 @@ Deltagarlänkar kan skickas via valfri kanal, till exempel Messenger, Discord, S
 
 ---
 
-### 7. Gör sista testet
-
-Skapa gärna en sista testdeltagare innan riktiga länkar skickas.
-
-Testa:
-
-- öppna länken på mobil
-- lägg några tips
-- spara
-- ladda om sidan
-- kontrollera att tipsen ligger kvar
-- kontrollera att deltagarstatus i admin uppdateras
-
-Ta sedan bort testdeltagaren innan riktiga länkar skickas, eller kör cleanup igen.
-
----
-
-### 8. När länkar är skickade
+### 15. När riktiga länkar är skickade
 
 Efter att riktiga deltagare fått sina länkar:
 
+- kör inte cleanup
 - ändra inte matchlistan om det inte är absolut nödvändigt
 - kör inte breda delete-kommandon i Supabase
 - kontrollera deltagarstatus inför deadline
@@ -194,32 +393,85 @@ Admin kan fortfarande:
 
 ---
 
+## Slutspelstestdata
+
+Slutspelstipset är separat från gruppspelstipset.
+
+Om du vill rensa slutspels-testdata men behålla importerade slutspelsmatcher/placeholders, kör:
+
+```sql
+delete from public.knockout_predictions;
+delete from public.knockout_final_predictions;
+
+update public.knockout_matches
+set
+    home_goals_ft = null,
+    away_goals_ft = null,
+    status = 'scheduled';
+
+update public.knockout_rounds
+set
+    deadline_at = null,
+    status = 'not_started';
+
+update public.knockout_final_result
+set
+    finalist_1 = null,
+    finalist_2 = null,
+    winner = null,
+    updated_at = now()
+where id = 1;
+```
+
+Detta rensar:
+
+- slutspelstips
+- finaltips
+- slutspelsresultat
+- slutspelsrundors deadlines/status
+- faktiskt finalutfall
+
+Det behåller:
+
+- slutspelsrundor
+- slutspelsmatcher
+- placeholders/importerad slutspelsstruktur
+
+---
+
 ## Under turneringen
 
 När matcher spelas:
 
 1. Gå till admin.
-2. Öppna fliken `Resultat`.
+2. Öppna `Resultat`.
 3. Välj match.
 4. Fyll i resultat.
 5. Kontrollera poängtabellen.
 6. Exportera backup vid behov.
 
-Poäng räknas automatiskt:
+När gruppspelet är färdigt:
 
-- 1 poäng för rätt 1/X/2
-- 1 poäng för rätt över/under 2,5 mål
+1. Kontrollera slutlig gruppspelstabell.
+2. Fyll i bonusmål för valda utslagsfråga-spelare.
+3. Kontrollera slutlig poängtabell.
+4. Exportera backup.
 
 ---
 
 ## Backup
 
-Admin kan exportera CSV-filer från fliken `Export`.
+Admin kan exportera CSV-filer från `Export`.
 
 Rekommenderade exporter under turneringen:
 
 - matcher och resultat
 - poängtabell
 - deltagarstatus
+- alla tips efter deadline
 
-Export av alla tips är låst fram till deadline.
+Exportera gärna backup:
+
+- direkt efter deadline
+- efter större resultatuppdateringar
+- när gruppspelet är färdigspelat
