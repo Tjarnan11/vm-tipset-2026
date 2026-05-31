@@ -1153,6 +1153,83 @@ def render_admin_export_section() -> None:
         mime="text/csv",
     )
 
+    st.divider()
+
+    render_bonus_predictions_export_section()
+
+
+def render_bonus_predictions_export_section() -> None:
+    """
+    Exporterar deltagarnas bonusval/utslagsfråga.
+
+    Exporten är låst fram till deadline, eftersom admin inte ska kunna se
+    deltagarnas bonusval i förväg.
+    """
+
+    st.subheader("Exportera utslagsfråga")
+
+    deadline_value = get_group_stage_deadline()
+    predictions_locked = is_deadline_passed(deadline_value)
+
+    if not predictions_locked:
+        st.info(
+            "Export av utslagsfrågan är låst fram till deadline. "
+            "Detta är för att admin inte ska kunna se deltagarnas bonusval i förväg."
+        )
+        return
+
+    participants = get_active_participants()
+    bonus_predictions = get_all_bonus_predictions()
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    participant_name_by_id = {
+        participant["id"]: participant["display_name"]
+        for participant in participants
+    }
+
+    bonus_by_participant_id = {
+        bonus_prediction["participant_id"]: bonus_prediction
+        for bonus_prediction in bonus_predictions
+    }
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+        bonus_prediction = bonus_by_participant_id.get(participant_id)
+
+        rows.append(
+            {
+                "Deltagare": participant_name_by_id.get(
+                    participant_id,
+                    "Okänd deltagare",
+                ),
+                "Utslagsfråga spelare": (
+                    bonus_prediction["scorer_name"]
+                    if bonus_prediction
+                    else ""
+                ),
+            }
+        )
+
+    bonus_df = pd.DataFrame(rows)
+
+    st.dataframe(
+        bonus_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.download_button(
+        label="Ladda ner utslagsfråga som CSV",
+        data=dataframe_to_csv_bytes(bonus_df),
+        file_name="utslagsfraga_gruppspel.csv",
+        mime="text/csv",
+        key="download_bonus_predictions_csv",
+    )
 
 def render_matches_table() -> None:
     """

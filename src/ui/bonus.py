@@ -46,6 +46,12 @@ def render_bonus_prediction_section(
         else ""
     )
 
+    if not predictions_locked:
+        if existing_scorer_name:
+            st.success(f"Nuvarande sparat val: {existing_scorer_name}")
+        else:
+            st.info("Du har inget sparat svar på utslagsfrågan ännu.")
+
     if predictions_locked:
         if existing_scorer_name:
             st.success(f"Ditt val: {existing_scorer_name}")

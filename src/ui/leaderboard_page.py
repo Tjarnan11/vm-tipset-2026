@@ -80,7 +80,6 @@ def render_leaderboard_section() -> None:
         "Rätt 1X2",
         "Rätt Ö/U",
         "Räknade matcher",
-        "Maxpoäng just nu",
     ]
 
     leaderboard_df = leaderboard_df[visible_columns]
