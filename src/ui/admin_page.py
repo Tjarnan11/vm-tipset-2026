@@ -51,6 +51,14 @@ from src.ui.leaderboard_page import render_leaderboard_section
 from src.ui.results_page import render_group_tables_section
 from src.ui.knockout_admin import render_knockout_admin_section
 
+from src.knockout_scoring import build_knockout_leaderboard
+from src.repositories.knockout_repo import (
+    get_all_knockout_final_predictions,
+    get_all_knockout_predictions,
+    get_knockout_final_result,
+    get_knockout_matches,
+    get_knockout_rounds,
+)
 
 def check_admin_password(password: str) -> bool:
     
@@ -1157,6 +1165,281 @@ def render_admin_export_section() -> None:
 
     render_bonus_predictions_export_section()
 
+    st.divider()
+
+    render_knockout_export_section()
+
+def render_knockout_export_section() -> None:
+    """
+    Exporterar slutspelsdata.
+
+    Slutspelstipset är separat från gruppspelstipset och har därför
+    egna exporter.
+    """
+
+    st.subheader("Exportera slutspel")
+
+    participants = get_active_participants()
+    rounds = get_knockout_rounds()
+    matches = get_knockout_matches()
+    predictions = get_all_knockout_predictions()
+    final_predictions = get_all_knockout_final_predictions()
+    final_result = get_knockout_final_result()
+
+    participant_name_by_id = {
+        participant["id"]: participant["display_name"]
+        for participant in participants
+    }
+
+    round_name_by_id = {
+        knockout_round["id"]: knockout_round["name"]
+        for knockout_round in rounds
+    }
+
+    match_by_id = {
+        match["id"]: match
+        for match in matches
+    }
+
+    # -----------------------------
+    # Slutspelsrundor
+    # -----------------------------
+
+    st.markdown("### Slutspelsrundor")
+
+    round_rows = []
+
+    for knockout_round in rounds:
+        round_rows.append(
+            {
+                "Runda": knockout_round["name"],
+                "Sortering": knockout_round["sort_order"],
+                "Deadline": knockout_round.get("deadline_at"),
+                "Status": knockout_round["status"],
+            }
+        )
+
+    rounds_df = pd.DataFrame(round_rows)
+
+    st.dataframe(
+        rounds_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.download_button(
+        label="Ladda ner slutspelsrundor som CSV",
+        data=dataframe_to_csv_bytes(rounds_df),
+        file_name="slutspel_rundor.csv",
+        mime="text/csv",
+        key="download_knockout_rounds_csv",
+    )
+
+    # -----------------------------
+    # Slutspelsmatcher
+    # -----------------------------
+
+    st.markdown("### Slutspelsmatcher")
+
+    match_rows = []
+
+    for match in matches:
+        round_info = match.get("knockout_rounds") or {}
+
+        match_rows.append(
+            {
+                "Match": match["match_no"],
+                "Runda": round_info.get(
+                    "name",
+                    round_name_by_id.get(match["round_id"], "-"),
+                ),
+                "Avspark": match.get("kickoff_at"),
+                "Lag 1": match["home_team"],
+                "Lag 2": match["away_team"],
+                "Fulltid lag 1": match.get("home_goals_ft"),
+                "Fulltid lag 2": match.get("away_goals_ft"),
+                "Status": match["status"],
+            }
+        )
+
+    matches_df = pd.DataFrame(match_rows)
+
+    st.dataframe(
+        matches_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.download_button(
+        label="Ladda ner slutspelsmatcher som CSV",
+        data=dataframe_to_csv_bytes(matches_df),
+        file_name="slutspel_matcher.csv",
+        mime="text/csv",
+        key="download_knockout_matches_csv",
+    )
+
+    # -----------------------------
+    # Slutspelstips
+    # -----------------------------
+
+    st.markdown("### Slutspelstips")
+
+    prediction_rows = []
+
+    for prediction in predictions:
+        match = match_by_id.get(prediction["match_id"], {})
+        round_info = match.get("knockout_rounds") or {}
+
+        prediction_rows.append(
+            {
+                "Deltagare": participant_name_by_id.get(
+                    prediction["participant_id"],
+                    "Okänd deltagare",
+                ),
+                "Match": match.get("match_no", "-"),
+                "Runda": round_info.get("name", "-"),
+                "Lag 1": match.get("home_team", "-"),
+                "Lag 2": match.get("away_team", "-"),
+                "Tippat lag 1 mål": prediction.get("predicted_home_goals"),
+                "Tippat lag 2 mål": prediction.get("predicted_away_goals"),
+                "Över/under": format_goals_pick_label(
+                    prediction.get("goals_pick")
+                ),
+                "Första målskytt": prediction.get("first_scorer_pick") or "",
+                "Första målskytt rätt": prediction.get(
+                    "first_scorer_correct"
+                ),
+                "Uppdaterad": prediction.get("updated_at"),
+            }
+        )
+
+    predictions_df = pd.DataFrame(prediction_rows)
+
+    st.dataframe(
+        predictions_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.download_button(
+        label="Ladda ner slutspelstips som CSV",
+        data=dataframe_to_csv_bytes(predictions_df),
+        file_name="slutspel_tips.csv",
+        mime="text/csv",
+        key="download_knockout_predictions_csv",
+    )
+
+    # -----------------------------
+    # Finaltips
+    # -----------------------------
+
+    st.markdown("### Finaltips")
+
+    final_prediction_rows = []
+
+    for final_prediction in final_predictions:
+        final_prediction_rows.append(
+            {
+                "Deltagare": participant_name_by_id.get(
+                    final_prediction["participant_id"],
+                    "Okänd deltagare",
+                ),
+                "Finalist 1": final_prediction.get("finalist_1") or "",
+                "Finalist 2": final_prediction.get("finalist_2") or "",
+                "Vinnare": final_prediction.get("winner") or "",
+                "Rätt finallag": final_prediction.get(
+                    "correct_finalists_count"
+                ),
+                "Vinnare rätt": final_prediction.get("winner_correct"),
+                "Uppdaterad": final_prediction.get("updated_at"),
+            }
+        )
+
+    final_predictions_df = pd.DataFrame(final_prediction_rows)
+
+    st.dataframe(
+        final_predictions_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.download_button(
+        label="Ladda ner finaltips som CSV",
+        data=dataframe_to_csv_bytes(final_predictions_df),
+        file_name="slutspel_finaltips.csv",
+        mime="text/csv",
+        key="download_knockout_final_predictions_csv",
+    )
+
+    # -----------------------------
+    # Faktiskt finalutfall
+    # -----------------------------
+
+    st.markdown("### Finalutfall")
+
+    if final_result:
+        final_result_df = pd.DataFrame(
+            [
+                {
+                    "Finalist 1": final_result.get("finalist_1") or "",
+                    "Finalist 2": final_result.get("finalist_2") or "",
+                    "Vinnare": final_result.get("winner") or "",
+                    "Uppdaterad": final_result.get("updated_at"),
+                }
+            ]
+        )
+    else:
+        final_result_df = pd.DataFrame(
+            columns=[
+                "Finalist 1",
+                "Finalist 2",
+                "Vinnare",
+                "Uppdaterad",
+            ]
+        )
+
+    st.dataframe(
+        final_result_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.download_button(
+        label="Ladda ner finalutfall som CSV",
+        data=dataframe_to_csv_bytes(final_result_df),
+        file_name="slutspel_finalutfall.csv",
+        mime="text/csv",
+        key="download_knockout_final_result_csv",
+    )
+
+    # -----------------------------
+    # Slutspelstabell
+    # -----------------------------
+
+    st.markdown("### Slutspelstabell")
+
+    knockout_leaderboard = build_knockout_leaderboard(
+        participants=participants,
+        matches=matches,
+        predictions=predictions,
+        final_predictions=final_predictions,
+    )
+
+    knockout_leaderboard_df = pd.DataFrame(knockout_leaderboard)
+
+    st.dataframe(
+        knockout_leaderboard_df,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.download_button(
+        label="Ladda ner slutspelstabell som CSV",
+        data=dataframe_to_csv_bytes(knockout_leaderboard_df),
+        file_name="slutspel_poangtabell.csv",
+        mime="text/csv",
+        key="download_knockout_leaderboard_csv",
+    )
 
 def render_bonus_predictions_export_section() -> None:
     """
