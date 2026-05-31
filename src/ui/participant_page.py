@@ -478,6 +478,92 @@ def render_predictions_form(
         st.success(save_message)
 
 
+def render_saved_group_stage_predictions_section(
+    participant: dict,
+) -> None:
+    """
+    Visar en read-only-sammanfattning av deltagarens sparade gruppspelstips.
+
+    Syftet är att deltagaren tydligt ska kunna kontrollera vad som faktiskt
+    ligger sparat i databasen.
+    """
+
+    st.header("Sparade gruppspelstips")
+
+    participant_id = participant["id"]
+
+    matches = get_matches()
+    predictions = get_predictions_for_participant(participant_id)
+    bonus_prediction = get_bonus_prediction_for_participant(participant_id)
+
+    predictions_by_match_id = {
+        prediction["match_id"]: prediction
+        for prediction in predictions
+    }
+
+    total_matches = len(matches)
+    saved_count = len(predictions)
+
+    st.metric("Sparade matchtips", f"{saved_count}/{total_matches}")
+
+    if bonus_prediction:
+        st.success(
+            f"Utslagsfråga sparad: {bonus_prediction['scorer_name']}"
+        )
+    else:
+        st.info("Ingen utslagsfråga är sparad ännu.")
+
+    if not predictions:
+        st.info("Du har inga sparade matchtips ännu.")
+        return
+
+    st.caption(
+        "Detta är en sammanfattning av de tips som just nu är sparade. "
+        "Om du ändrar något i tipsformuläret behöver du trycka på Spara ändringar "
+        "innan det syns här."
+    )
+
+    view_filter = st.radio(
+        "Visa",
+        options=["Endast tippade matcher", "Alla matcher"],
+        horizontal=True,
+        key="saved_group_stage_predictions_filter",
+    )
+
+    last_date_heading = None
+
+    for match in matches:
+        prediction = predictions_by_match_id.get(match["id"])
+
+        if view_filter == "Endast tippade matcher" and prediction is None:
+            continue
+
+        date_heading = format_date_swedish(match["kickoff_at"])
+
+        if date_heading != last_date_heading:
+            st.markdown(f"### {date_heading}")
+            last_date_heading = date_heading
+
+        with st.container(border=True):
+            st.caption(
+                f"Match {match['match_no']} · Grupp {match['group_name']} · "
+                f"{format_datetime_swedish(match['kickoff_at'])}"
+            )
+
+            st.markdown(
+                f"### {match['home_team']} – {match['away_team']}"
+            )
+
+            if prediction:
+                st.markdown("**Ditt sparade tips:**")
+
+                st.markdown(
+                    f"### {prediction['outcome_pick']} · "
+                    f"{format_goals_pick_label(prediction['goals_pick'])}"
+                )
+            else:
+                st.info("Inget sparat tips på denna match.")
+
 def render_participant_page(token: str) -> None:
     """
     Visas när användaren öppnar sin privata länk.
@@ -501,6 +587,7 @@ def render_participant_page(token: str) -> None:
 
     (
         tab_tips,
+        tab_saved_tips,
         tab_leaderboard,
         tab_predictions,
         tab_matches,
@@ -509,6 +596,7 @@ def render_participant_page(token: str) -> None:
     ) = st.tabs(
         [
             "📝 Gruppspelstips",
+            "✅ Sparade gruppspelstips",
             "📊 Gruppspelstabell",
             "🧾 Allas gruppspelstips",
             "📅 Gruppspel matcher",
@@ -538,6 +626,9 @@ def render_participant_page(token: str) -> None:
         st.divider()
 
         render_my_group_stage_export_section(participant)
+
+    with tab_saved_tips:
+        render_saved_group_stage_predictions_section(participant)
 
     with tab_leaderboard:
         if predictions_locked:
