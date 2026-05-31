@@ -117,6 +117,180 @@ def render_knockout_rounds_overview() -> None:
         hide_index=True,
     )
 
+def render_knockout_rules_section() -> None:
+    """
+    Visar regler för slutspelstipset.
+
+    Reglerna ligger inne i Slutspel-fliken eftersom slutspelet är en separat
+    tävlingsdel från gruppspelet.
+    """
+
+    st.subheader("Slutspelsregler")
+
+    st.info(
+        "Slutspelstipset är separat från gruppspelstipset. "
+        "Du tippar varje slutspelsrunda när den öppnas."
+    )
+
+    st.markdown(
+        """
+        ### Deadlines per runda
+
+        Slutspelet har en deadline per runda.
+
+        En runda är tippbar när:
+
+        - rundans status är `open`
+        - deadline ligger i framtiden
+
+        När deadline har passerat låses tipsen för den rundan.
+
+        Eftersom vissa slutspelsmatcher blir klara senare än andra kan tiden att
+        tippa en specifik runda ibland bli kort. Lägg därför gärna dina tips så
+        snart matcherna i en runda är kända.
+        """
+    )
+
+    st.markdown(
+        """
+        ### Vad tippar du per match?
+
+        För varje slutspelsmatch tippar du:
+
+        1. exakt resultat efter ordinarie tid
+        2. över/under 2,5 mål efter ordinarie tid
+        3. första målskytt under ordinarie tid
+
+        **Ordinarie tid betyder 90 minuter + tilläggstid.**
+
+        Förlängning och straffläggning räknas inte för något av matchtipsen:
+        exakt resultat, 1/X/2, över/under eller första målskytt.
+        """
+    )
+
+    st.markdown(
+        """
+        ### Exakt resultat och 1/X/2
+
+        I slutspelet fyller du bara i exakt resultat.
+
+        Appen räknar automatiskt ut 1/X/2 från ditt resultat:
+
+        - `2–1` ger `1`
+        - `1–1` ger `X`
+        - `0–2` ger `2`
+
+        Du kan alltså få poäng för rätt matchutfall även om du inte har exakt
+        rätt resultat.
+        """
+    )
+
+    st.markdown(
+        """
+        ### Över/under 2,5 mål
+
+        Över/under gäller antal mål efter fulltid:
+
+        - **Över 2,5 mål** = minst 3 mål
+        - **Under 2,5 mål** = 0, 1 eller 2 mål
+
+        Över/under-valet är separat från ditt exakta resultat.
+        """
+    )
+
+    st.markdown(
+        """
+        ### Första målskytt
+
+        Du skriver själv vilken spelare du tror gör matchens första mål under ordinarie tid.
+
+        Första målskytt gäller endast mål under 90 minuter + tilläggstid.
+        Mål i förlängning eller straffläggning räknas inte.
+
+        Eftersom detta är fritext bedömer admin manuellt om tipset är rätt eller fel.
+        """
+    )
+
+    st.markdown(
+        """
+        ### Poäng per slutspelsmatch
+
+        Du kan få max **8 poäng per match**:
+
+        - **1 poäng** för rätt 1/X/2 efter fulltid
+        - **1 poäng** för rätt över/under 2,5 mål efter fulltid
+        - **2 poäng** för exakt rätt resultat efter fulltid
+        - **4 poäng** för rätt första målskytt
+
+        Om du har exakt rätt resultat får du också rätt 1/X/2.
+        """
+    )
+
+    st.markdown(
+        """
+        ### Finaltips
+
+        Innan slutspelet börjar tippar du också:
+
+        - vilka två lag som går till final
+        - vilket av dina två finallag som vinner finalen
+
+        Vinnaren måste alltså vara ett av de två lag du har valt som finalister.
+
+        Finaltipsen låses vid första slutspelsrundans deadline.
+
+        Poäng:
+
+        - **5 poäng** per rätt finallag
+        - **10 poäng** för rätt finalvinnare
+
+        Eftersom finaltipsen är fritext bedömer admin manuellt hur många
+        finallag som var rätt och om vinnaren var rätt.
+        """
+    )
+
+    st.markdown(
+        """
+        ### Sortering i slutspelstabellen
+
+        Slutspelstabellen sorteras i första hand efter totalpoäng.
+
+        Vid lika poäng används just nu:
+
+        1. flest exakta resultat
+        2. flest rätt 1/X/2
+        3. flest rätt första målskytt
+        4. delad placering om deltagarna fortfarande är lika
+        """
+    )
+
+    st.markdown(
+    """
+    ### Prispott
+
+    Slutspelstipset räknas som en separat tävling från gruppspelstipset.
+
+    Om slutspelet spelas med insats används samma grundprincip som i gruppspelet:
+
+    - Om en deltagare är ensam 1:a får vinnaren prispotten minus en insats.
+    - Den som är ensam 2:a får tillbaka en insats.
+    - Om flera deltagare delar 1:a plats delar de på hela prispotten.
+    - Om en deltagare är ensam 1:a men flera deltagare delar 2:a plats, delar 2:orna på en insats.
+    """
+)
+
+st.markdown(
+    """
+    ### Admin och rättvisa
+
+    Admin sköter rundor, deadlines, slutspelsmatcher, resultat och manuell bedömning av fritextsvar.
+
+    Deltagarnas slutspelstips ska inte visas för andra deltagare förrän relevant runda är låst.
+
+    Efter att en runda är låst kan tips och poäng för den rundan visas.
+    """
+)
+
 
 def render_knockout_matches_overview() -> None:
     """
@@ -418,11 +592,6 @@ def render_knockout_participant_section(
 
     st.header("Slutspel")
 
-    st.info(
-        "Slutspelstipset är separat från gruppspelstipset. "
-        "Du tippar varje slutspelsrunda när den öppnas."
-    )
-
     rounds = get_knockout_rounds()
 
     if not rounds:
@@ -435,6 +604,7 @@ def render_knockout_participant_section(
         tab_final,
         tab_matches,
         tab_leaderboard,
+        tab_rules,
     ) = st.tabs(
         [
             "🏆 Rundor",
@@ -442,6 +612,7 @@ def render_knockout_participant_section(
             "🏁 Finaltips",
             "📅 Matcher",
             "📊 Tabell",
+            "ℹ️ Regler",
         ]
     )
 
@@ -481,3 +652,6 @@ def render_knockout_participant_section(
 
     with tab_leaderboard:
         render_knockout_leaderboard_section()
+
+    with tab_rules:
+        render_knockout_rules_section()

@@ -18,7 +18,13 @@ def render_rules_section() -> None:
 
     deadline_value = get_group_stage_deadline()
 
-    st.header("Regler")
+    st.header("Gruppspelsregler")
+
+    st.info(
+        "Den här sidan beskriver gruppspelstipset. "
+        "Slutspelstipset är en separat tävling och har egna regler under "
+        "fliken 🏆 Slutspel → ℹ️ Regler."
+    )
 
     st.info(
         "Du tippar alla gruppspelsmatcher i VM 2026. "
