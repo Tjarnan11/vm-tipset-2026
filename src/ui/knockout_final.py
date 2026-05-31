@@ -17,6 +17,7 @@ from src.repositories.knockout_repo import (
     update_knockout_final_prediction_review,
 )
 from src.repositories.participants_repo import get_active_participants
+from src.knockout_scoring import calculate_knockout_final_points
 from src.time_utils import format_datetime_swedish
 
 def format_winner_correct_status(value: bool | None) -> str:
@@ -61,6 +62,14 @@ def get_first_knockout_round() -> dict | None:
 
     return rounds[0]
 
+def is_final_prediction_public() -> bool:
+    """
+    Kontrollerar om finaltipsen ska visas för alla.
+
+    För MVP visas allas finaltips när finaltipsen inte längre är öppna.
+    """
+
+    return not is_final_prediction_open()
 
 def is_final_prediction_open() -> bool:
     """
@@ -84,6 +93,98 @@ def is_final_prediction_open() -> bool:
 
     return not is_deadline_passed(deadline_at)
 
+def render_all_knockout_final_predictions_section() -> None:
+    """
+    Visar allas finaltips efter att finaltipsen är låsta.
+    """
+
+    st.subheader("Allas finaltips")
+
+    if not is_final_prediction_public():
+        st.info("Allas finaltips visas när finaltipsen är låsta.")
+        return
+
+    participants = get_active_participants()
+    final_predictions = get_all_knockout_final_predictions()
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    participant_name_by_id = {
+        participant["id"]: participant["display_name"]
+        for participant in participants
+    }
+
+    final_prediction_by_participant_id = {
+        final_prediction["participant_id"]: final_prediction
+        for final_prediction in final_predictions
+    }
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+        final_prediction = final_prediction_by_participant_id.get(
+            participant_id
+        )
+
+        if final_prediction:
+            final_score = calculate_knockout_final_points(final_prediction)
+
+            rows.append(
+                {
+                    "Deltagare": participant_name_by_id.get(
+                        participant_id,
+                        "Okänd deltagare",
+                    ),
+                    "Finalist 1": final_prediction.get("finalist_1") or "-",
+                    "Finalist 2": final_prediction.get("finalist_2") or "-",
+                    "Vinnare": final_prediction.get("winner") or "-",
+                    "Rätt finallag": (
+                        final_prediction.get("correct_finalists_count")
+                        if final_prediction.get("correct_finalists_count")
+                        is not None
+                        else "-"
+                    ),
+                    "Vinnare rätt": (
+                        "Ja"
+                        if final_prediction.get("winner_correct") is True
+                        else (
+                            "Nej"
+                            if final_prediction.get("winner_correct") is False
+                            else "-"
+                        )
+                    ),
+                    "Poäng": final_score["points"],
+                }
+            )
+        else:
+            rows.append(
+                {
+                    "Deltagare": participant_name_by_id.get(
+                        participant_id,
+                        "Okänd deltagare",
+                    ),
+                    "Finalist 1": "-",
+                    "Finalist 2": "-",
+                    "Vinnare": "-",
+                    "Rätt finallag": "-",
+                    "Vinnare rätt": "-",
+                    "Poäng": "-",
+                }
+            )
+
+    st.dataframe(
+        rows,
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.caption(
+        "Finalpoäng visas när admin har bedömt finaltipsen. "
+        "5p per rätt finallag och 10p för rätt finalvinnare."
+    )
 
 def render_knockout_final_prediction_section(
     participant: dict,
@@ -150,6 +251,10 @@ def render_knockout_final_prediction_section(
         else:
             st.info("Du har inget sparat finaltips.")
 
+        st.divider()
+
+        render_all_knockout_final_predictions_section()
+
         return
 
     with st.form("knockout_final_prediction_form"):
@@ -207,6 +312,10 @@ def render_knockout_final_prediction_section(
             st.success("Finaltipset är sparat.")
         else:
             st.error("Kunde inte spara finaltipset.")
+
+        st.divider()
+
+        render_all_knockout_final_predictions_section()
 
 
 def render_knockout_final_admin_section() -> None:
