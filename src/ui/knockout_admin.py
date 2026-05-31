@@ -37,7 +37,6 @@ from src.ui.knockout_final import (
     render_knockout_final_review_admin_section,
 )
 
-from src.ui.knockout_bracket import render_knockout_bracket_section
 
 def render_knockout_matches_table() -> None:
     """
@@ -728,10 +727,6 @@ def render_knockout_admin_section() -> None:
     st.subheader("Slutspelsmatcher")
 
     render_knockout_matches_table()
-
-    st.divider()
-
-    render_knockout_bracket_section()
 
     st.divider()
 

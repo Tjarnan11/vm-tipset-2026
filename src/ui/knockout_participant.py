@@ -26,7 +26,6 @@ from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
 
 from src.ui.knockout_final import render_knockout_final_prediction_section
 
-from src.ui.knockout_bracket import render_knockout_bracket_section
 
 
 def is_knockout_round_open_for_predictions(
@@ -435,7 +434,6 @@ def render_knockout_participant_section(
         tab_predictions,
         tab_final,
         tab_matches,
-        tab_bracket,
         tab_leaderboard,
     ) = st.tabs(
         [
@@ -443,7 +441,6 @@ def render_knockout_participant_section(
             "📝 Tippa",
             "🏁 Finaltips",
             "📅 Matcher",
-            "🌳 Träd",
             "📊 Tabell",
         ]
     )
@@ -481,8 +478,6 @@ def render_knockout_participant_section(
     with tab_matches:
         render_knockout_matches_overview()
 
-    with tab_bracket:
-        render_knockout_bracket_section()
 
     with tab_leaderboard:
         render_knockout_leaderboard_section()
