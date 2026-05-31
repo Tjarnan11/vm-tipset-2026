@@ -25,6 +25,7 @@ from src.repositories.knockout_repo import (
     update_knockout_match_teams,
     update_knockout_round,
     upsert_knockout_match,
+    update_knockout_match_first_scorer,
 )
 
 from src.time_utils import format_datetime_swedish
@@ -394,6 +395,18 @@ def render_knockout_result_admin_section() -> None:
         key=f"ko_result_away_{selected_match_id}",
     )
 
+    current_first_scorer = selected_match.get("first_scorer") or ""
+
+    first_scorer = st.text_input(
+        "Faktisk första målskytt",
+        value=current_first_scorer,
+        placeholder="Exempel: Kylian Mbappé",
+        help=(
+            "Gäller första målskytt under ordinarie tid. "
+            "Används för visning; poängen sätts via målskyttsbedömningen."
+        ),
+    )
+
     col1, col2 = st.columns(2)
 
     with col1:
@@ -415,6 +428,11 @@ def render_knockout_result_admin_section() -> None:
             away_goals_ft=int(away_goals_ft),
         )
 
+        update_knockout_match_first_scorer(
+            match_id=selected_match_id,
+            first_scorer=first_scorer,
+        )
+
         if updated_match:
             st.success(
                 f"Resultat sparat: "
@@ -427,6 +445,10 @@ def render_knockout_result_admin_section() -> None:
 
     if clear_clicked:
         cleared_match = clear_knockout_match_result(selected_match_id)
+        update_knockout_match_first_scorer(
+            match_id=selected_match_id,
+            first_scorer=None,
+        )
 
         if cleared_match:
             st.success("Slutspelsresultatet är rensat.")

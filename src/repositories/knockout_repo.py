@@ -72,7 +72,7 @@ def get_knockout_matches() -> list[dict]:
         supabase.table("knockout_matches")
         .select(
             "id, round_id, match_no, kickoff_at, home_team, away_team, "
-            "home_placeholder, away_placeholder, "
+            "home_placeholder, away_placeholder, first_scorer, "
             "home_goals_ft, away_goals_ft, status, created_at, "
             "knockout_rounds(name, sort_order)"
         )
@@ -94,7 +94,7 @@ def get_knockout_matches_for_round(round_id: str) -> list[dict]:
         supabase.table("knockout_matches")
         .select(
             "id, round_id, match_no, kickoff_at, home_team, away_team, "
-            "home_placeholder, away_placeholder, "
+            "home_placeholder, away_placeholder, first_scorer, "
             "home_goals_ft, away_goals_ft, status, created_at"
         )
         .eq("round_id", round_id)
@@ -517,6 +517,41 @@ def update_knockout_match_teams(
             {
                 "home_team": home_team,
                 "away_team": away_team,
+            }
+        )
+        .eq("id", match_id)
+        .execute()
+    )
+
+    if response.data:
+        return response.data[0]
+
+    return None
+
+def update_knockout_match_first_scorer(
+    match_id: str,
+    first_scorer: str | None,
+) -> dict | None:
+    """
+    Sparar faktisk första målskytt för en slutspelsmatch.
+
+    Detta används för visning. Poäng ges fortfarande via manuell
+    bedömning av varje deltagares målskyttstips.
+    """
+
+    supabase = get_supabase_client()
+
+    cleaned_first_scorer = (
+        first_scorer.strip()
+        if first_scorer
+        else None
+    )
+
+    response = (
+        supabase.table("knockout_matches")
+        .update(
+            {
+                "first_scorer": cleaned_first_scorer,
             }
         )
         .eq("id", match_id)

@@ -26,6 +26,9 @@ from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
 
 from src.ui.knockout_final import render_knockout_final_prediction_section
 
+from src.knockout_scoring import calculate_knockout_match_points
+from src.scoring import get_goals_pick, get_match_outcome
+
 
 
 def is_knockout_round_open_for_predictions(
@@ -80,6 +83,16 @@ def format_knockout_match_result_text(match: dict) -> str:
         )
 
     return f"{match['home_team']} – {match['away_team']}"
+
+def get_prediction_outcome_text(prediction: dict) -> str:
+    """
+    Härleder 1/X/2 från deltagarens exakta slutspelstips.
+    """
+
+    return get_match_outcome(
+        int(prediction["predicted_home_goals"]),
+        int(prediction["predicted_away_goals"]),
+    )
 
 def render_knockout_rounds_overview() -> None:
     """
@@ -265,31 +278,31 @@ def render_knockout_rules_section() -> None:
     )
 
     st.markdown(
-    """
-    ### Prispott
+        """
+        ### Prispott
 
-    Slutspelstipset räknas som en separat tävling från gruppspelstipset.
+        Slutspelstipset räknas som en separat tävling från gruppspelstipset.
 
-    Om slutspelet spelas med insats används samma grundprincip som i gruppspelet:
+        Om slutspelet spelas med insats används samma grundprincip som i gruppspelet:
 
-    - Om en deltagare är ensam 1:a får vinnaren prispotten minus en insats.
-    - Den som är ensam 2:a får tillbaka en insats.
-    - Om flera deltagare delar 1:a plats delar de på hela prispotten.
-    - Om en deltagare är ensam 1:a men flera deltagare delar 2:a plats, delar 2:orna på en insats.
-    """
-)
+        - Om en deltagare är ensam 1:a får vinnaren prispotten minus en insats.
+        - Den som är ensam 2:a får tillbaka en insats.
+        - Om flera deltagare delar 1:a plats delar de på hela prispotten.
+        - Om en deltagare är ensam 1:a men flera deltagare delar 2:a plats, delar 2:orna på en insats.
+        """
+    )
 
-st.markdown(
-    """
-    ### Admin och rättvisa
+    st.markdown(
+        """
+        ### Admin och rättvisa
 
-    Admin sköter rundor, deadlines, slutspelsmatcher, resultat och manuell bedömning av fritextsvar.
+        Admin sköter rundor, deadlines, slutspelsmatcher, resultat och manuell bedömning av fritextsvar.
 
-    Deltagarnas slutspelstips ska inte visas för andra deltagare förrän relevant runda är låst.
+        Deltagarnas slutspelstips ska inte visas för andra deltagare förrän relevant runda är låst.
 
-    Efter att en runda är låst kan tips och poäng för den rundan visas.
-    """
-)
+        Efter att en runda är låst kan tips och poäng för den rundan visas.
+        """
+    )
 
 
 def render_knockout_matches_overview() -> None:
@@ -338,6 +351,89 @@ def render_knockout_matches_overview() -> None:
             else:
                 st.info("Resultat är inte ifyllt ännu.")
 
+def render_locked_knockout_prediction_card(
+    match: dict,
+    existing_prediction: dict | None,
+) -> None:
+    """
+    Visar ett kompakt read-only-kort för en låst slutspelsmatch.
+
+    Kortet visar:
+    - match/resultat
+    - deltagarens tips
+    - rätt rad om resultat finns
+    - poäng per match
+    """
+
+    kickoff_at = match.get("kickoff_at")
+
+    kickoff_text = (
+        format_datetime_swedish(kickoff_at)
+        if kickoff_at
+        else "Avspark ej satt"
+    )
+
+    st.caption(
+        f"Match {match['match_no']} · {kickoff_text}"
+    )
+
+    st.markdown(
+        f"### {format_knockout_match_result_text(match)}"
+    )
+
+    if existing_prediction is None:
+        st.warning("Du har inget sparat tips på denna match.")
+        return
+
+    predicted_home_goals = existing_prediction["predicted_home_goals"]
+    predicted_away_goals = existing_prediction["predicted_away_goals"]
+    predicted_outcome = get_prediction_outcome_text(existing_prediction)
+
+    st.markdown(
+        "**Ditt tips:** "
+        f"{predicted_home_goals}–{predicted_away_goals} "
+        f"({predicted_outcome}) · "
+        f"{format_goals_pick_label(existing_prediction['goals_pick'])}"
+    )
+
+    first_scorer = existing_prediction.get("first_scorer_pick") or "-"
+    st.markdown(f"**Din första målskytt:** {first_scorer}")
+
+    if not is_finished_knockout_match(match):
+        st.info("Resultat är inte ifyllt ännu.")
+        return
+
+    home_goals = int(match["home_goals_ft"])
+    away_goals = int(match["away_goals_ft"])
+
+    correct_outcome = get_match_outcome(home_goals, away_goals)
+    correct_goals_pick = get_goals_pick(home_goals, away_goals)
+
+    st.markdown(
+        f"**Rätt rad:** {correct_outcome} · "
+        f"{format_goals_pick_label(correct_goals_pick)}"
+    )
+
+    actual_first_scorer = match.get("first_scorer")
+
+    if actual_first_scorer:
+        st.markdown(f"**Rätt första målskytt:** {actual_first_scorer}")
+
+    score = calculate_knockout_match_points(
+        prediction=existing_prediction,
+        match=match,
+    )
+
+    st.markdown("**Poäng**")
+    st.markdown(f"## {score['points']}/8")
+
+    st.caption(
+        f"{score['outcome_points']}p för 1X2 · "
+        f"{score['goals_points']}p för över/under · "
+        f"{score['exact_result_points']}p för exakt resultat · "
+        f"{score['first_scorer_points']}p för första målskytt"
+    )
+
 def render_read_only_knockout_round_predictions(
     matches: list[dict],
     predictions_by_match_id: dict,
@@ -350,36 +446,12 @@ def render_read_only_knockout_round_predictions(
 
     for match in matches:
         existing = predictions_by_match_id.get(match["id"])
-        kickoff_at = match.get("kickoff_at")
 
         with st.container(border=True):
-            st.caption(
-                f"Match {match['match_no']}"
+            render_locked_knockout_prediction_card(
+                match=match,
+                existing_prediction=existing,
             )
-
-            st.markdown(
-                f"### {format_knockout_match_result_text(match)}"
-            )
-
-            if kickoff_at:
-                st.caption(
-                    f"Avspark: {format_datetime_swedish(kickoff_at)} svensk tid"
-                )
-            else:
-                st.caption("Avspark: ej satt")
-
-            if existing:
-                st.markdown(
-                    "**Ditt tips:** "
-                    f"{existing['predicted_home_goals']}–"
-                    f"{existing['predicted_away_goals']} · "
-                    f"{format_goals_pick_label(existing['goals_pick'])}"
-                )
-
-                first_scorer = existing.get("first_scorer_pick") or "-"
-                st.markdown(f"**Första målskytt:** {first_scorer}")
-            else:
-                st.info("Du har inget sparat tips på denna match.")
 
 def render_knockout_round_prediction_form(
     participant: dict,

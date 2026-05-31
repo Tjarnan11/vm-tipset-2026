@@ -407,6 +407,7 @@ update public.knockout_matches
 set
     home_goals_ft = null,
     away_goals_ft = null,
+    first_scorer = null,
     status = 'scheduled';
 
 update public.knockout_rounds
