@@ -117,16 +117,13 @@ def render_public_matches_results_section(
                 last_date_heading = date_heading
 
             with st.container(border=True):
-                st.markdown(
-                    f"**Match {match['match_no']} · Grupp {match['group_name']}**"
+                st.caption(
+                    f"Match {match['match_no']} · Grupp {match['group_name']} · "
+                    f"{format_datetime_swedish(match['kickoff_at'])}"
                 )
 
                 st.markdown(
                     f"### {match['home_team']} – {match['away_team']}"
-                )
-
-                st.caption(
-                    f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
                 )
 
                 if is_finished_match(match):

@@ -155,14 +155,13 @@ def render_public_predictions_overview_section() -> None:
         if match["id"] == selected_match_id
     )
 
-    st.subheader(
-        f"{selected_match['home_team']} – {selected_match['away_team']}"
+    st.caption(
+        f"Match {selected_match['match_no']} · Grupp {selected_match['group_name']} · "
+        f"{format_datetime_swedish(selected_match['kickoff_at'])}"
     )
 
-    st.caption(
-        f"Match {selected_match['match_no']} · "
-        f"Grupp {selected_match['group_name']} · "
-        f"Avspark: {format_datetime_swedish(selected_match['kickoff_at'])} svensk tid"
+    st.markdown(
+        f"### {selected_match['home_team']} – {selected_match['away_team']}"
     )
 
     selected_match_is_finished = is_finished_match(selected_match)
