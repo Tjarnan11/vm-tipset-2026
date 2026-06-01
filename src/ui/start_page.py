@@ -32,13 +32,5 @@ def render_dev_match_preview() -> None:
     Den här kan vi ta bort eller flytta senare.
     """
 
-    st.header("Utvecklingstest: exempelmatcher")
-
-    matches_path = Path("data/matches_template.csv")
-
-    if matches_path.exists() and matches_path.stat().st_size > 0:
-        matches = pd.read_csv(matches_path)
-        st.dataframe(matches, width="stretch")
-    else:
-        st.warning("Ingen matchfil hittades ännu eller filen är tom.")
+    pass
 
