@@ -19,6 +19,7 @@ from src.repositories.knockout_repo import (
     get_knockout_predictions_for_participant,
     get_knockout_rounds,
     save_knockout_predictions,
+    get_knockout_final_prediction_for_participant,
 )
 from src.time_utils import format_datetime_swedish
 from src.ui.formatting import format_goals_pick_label
@@ -348,6 +349,9 @@ def render_saved_knockout_predictions_section(
     rounds = get_knockout_rounds()
     matches = get_knockout_matches()
     predictions = get_knockout_predictions_for_participant(participant_id)
+    final_prediction = get_knockout_final_prediction_for_participant(
+        participant_id
+    )
 
     predictions_by_match_id = {
         prediction["match_id"]: prediction
@@ -358,6 +362,17 @@ def render_saved_knockout_predictions_section(
     saved_count = len(predictions)
 
     st.metric("Sparade slutspelstips", f"{saved_count}/{total_matches}")
+
+    st.subheader("Sparat finaltips")
+
+    if final_prediction:
+        st.markdown(f"**Finalist 1:** {final_prediction.get('finalist_1') or '-'}")
+        st.markdown(f"**Finalist 2:** {final_prediction.get('finalist_2') or '-'}")
+        st.markdown(f"**Vinnare:** {final_prediction.get('winner') or '-'}")
+    else:
+        st.info("Du har inget sparat finaltips ännu.")
+
+    st.subheader("Sparade matchtips")
 
     if not predictions:
         st.info("Du har inga sparade slutspelstips ännu.")
@@ -957,8 +972,6 @@ def render_knockout_participant_section(
     - matchöversikt
     """
 
-    st.header("Slutspel")
-
     rounds = get_knockout_rounds()
 
     if not rounds:
@@ -968,8 +981,8 @@ def render_knockout_participant_section(
     (
         tab_rounds,
         tab_predictions,
-        tab_saved_predictions,
         tab_final,
+        tab_saved_predictions,
         tab_matches,
         tab_leaderboard,
         tab_rules,
@@ -977,8 +990,8 @@ def render_knockout_participant_section(
         [
             "🏆 Rundor",
             "📝 Tips & resultat",
-            "✅ Sparade tips",
             "🏁 Finaltips",
+            "✅ Sparade tips",
             "📅 Matcher",
             "📊 Tabell",
             "ℹ️ Regler",
@@ -1012,11 +1025,12 @@ def render_knockout_participant_section(
             knockout_round=selected_round,
         )
 
+    with tab_final:
+        render_knockout_final_prediction_section(participant)
+
     with tab_saved_predictions:
         render_saved_knockout_predictions_section(participant)
 
-    with tab_final:
-        render_knockout_final_prediction_section(participant)
 
     with tab_matches:
         render_knockout_matches_overview()
