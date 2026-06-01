@@ -142,7 +142,7 @@ def render_all_knockout_final_predictions_section() -> None:
                     "Finalist 2": final_prediction.get("finalist_2") or "-",
                     "Vinnare": final_prediction.get("winner") or "-",
                     "Rätt finallag": (
-                        final_prediction.get("correct_finalists_count")
+                        str(final_prediction.get("correct_finalists_count"))
                         if final_prediction.get("correct_finalists_count")
                         is not None
                         else "-"
@@ -443,7 +443,7 @@ def render_knockout_final_review_admin_section() -> None:
                 "Finalist 2": final_prediction.get("finalist_2") or "-",
                 "Vinnare": final_prediction.get("winner") or "-",
                 "Rätt finallag": (
-                    final_prediction.get("correct_finalists_count")
+                    str(final_prediction.get("correct_finalists_count"))
                     if final_prediction.get("correct_finalists_count")
                     is not None
                     else "Ej bedömt"

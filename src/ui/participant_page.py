@@ -336,15 +336,11 @@ def render_predictions_form(
                 
 
                 st.markdown(
-                    f"**Match {match['match_no']} · Grupp {match['group_name']}**"
+                    f"**Match {match['match_no']} · Grupp {match['group_name']} · {format_datetime_swedish(match['kickoff_at'])} svensk tid**"
                 )
 
                 st.markdown(
                     f"### {match['home_team']} – {match['away_team']}"
-                )
-
-                st.caption(
-                    f"Avspark: {format_datetime_swedish(match['kickoff_at'])} svensk tid"
                 )
 
                 # Förifyll 1/X/2 om deltagaren redan har tippat matchen.
@@ -530,12 +526,6 @@ def render_saved_group_stage_predictions_section(
     if not predictions:
         st.info("Du har inga sparade matchtips ännu.")
         return
-
-    st.caption(
-        "Detta är en sammanfattning av de tips som just nu är sparade. "
-        "Om du ändrar något i tipsformuläret behöver du trycka på Spara ändringar "
-        "innan det syns här."
-    )
 
     view_filter = st.radio(
         "Visa",
