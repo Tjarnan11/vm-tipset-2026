@@ -599,71 +599,80 @@ def render_participant_page(token: str) -> None:
     deadline_value = get_group_stage_deadline()
     predictions_locked = is_deadline_passed(deadline_value)
 
-    (
-        tab_tips,
-        tab_saved_tips,
-        tab_leaderboard,
-        tab_predictions,
-        tab_matches,
-        tab_knockout,
-        tab_rules,
-    ) = st.tabs(
+    tab_group_stage, tab_knockout, tab_rules = st.tabs(
         [
-            "📝 Gruppspelstips",
-            "✅ Sparade gruppspelstips",
-            "📊 Gruppspelstabell",
-            "🧾 Allas gruppspelstips",
-            "📅 Gruppspel matcher",
+            "⚽ Gruppspel",
             "🏆 Slutspel",
             "ℹ️ Regler",
         ]
     )
 
-    with tab_tips:
-        st.header("Gruppspelstips")
-
-        st.info(
-            "Deadline: "
-            f"{format_deadline_swedish(deadline_value)} svensk tid"
+    with tab_group_stage:
+        (
+            tab_tips,
+            tab_saved_tips,
+            tab_leaderboard,
+            tab_predictions,
+            tab_matches,
+        ) = st.tabs(
+            [
+                "📝 Tippa",
+                "✅ Sparade tips",
+                "📊 Tabell",
+                "🧾 Allas tips",
+                "📅 Matcher & resultat",
+            ]
         )
 
-        render_bonus_prediction_section(
-            participant=participant,
-            predictions_locked=predictions_locked,
-        )
+        with tab_tips:
+            st.header("Gruppspelstips")
 
-        render_predictions_form(
-            participant=participant,
-            predictions_locked=predictions_locked,
-        )
+            st.info(
+                "Deadline: "
+                f"{format_deadline_swedish(deadline_value)} svensk tid"
+            )
 
-        st.divider()
+            render_bonus_prediction_section(
+                participant=participant,
+                predictions_locked=predictions_locked,
+            )
 
-        render_my_group_stage_export_section(participant)
+            render_predictions_form(
+                participant=participant,
+                predictions_locked=predictions_locked,
+            )
 
-    with tab_saved_tips:
-        render_saved_group_stage_predictions_section(
-            participant=participant,
-            predictions_locked=predictions_locked,
-        )
+            st.divider()
 
-    with tab_leaderboard:
-        if predictions_locked:
-            render_leaderboard_section()
-        else:
-            st.info("Poängtabellen visas efter deadline.")
+            render_my_group_stage_export_section(participant)
 
-    with tab_predictions:
-        if predictions_locked:
-            render_public_predictions_overview_section()
-        else:
-            st.info("Allas tips visas efter deadline.")
+        with tab_saved_tips:
+            render_saved_group_stage_predictions_section(
+                participant=participant,
+                predictions_locked=predictions_locked,
+            )
 
-    with tab_matches:
-        render_public_matches_results_section(
-            predictions_locked=predictions_locked,
-        )
+        with tab_leaderboard:
+            if predictions_locked:
+                render_leaderboard_section()
+            else:
+                st.info(
+                    "Gruppspelstabellen visas när deadline har passerat."
+                )
 
+        with tab_predictions:
+            if predictions_locked:
+                render_public_predictions_overview_section()
+            else:
+                st.info(
+                    "Allas gruppspelstips visas när deadline har passerat."
+                )
+
+        with tab_matches:
+            render_public_matches_results_section(
+                predictions_locked=predictions_locked,
+            )
+    
     with tab_knockout:
         render_knockout_participant_section(participant)
 
