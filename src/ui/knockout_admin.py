@@ -542,6 +542,16 @@ def render_first_scorer_admin_section() -> None:
         if match["id"] == selected_match_id
     )
 
+    actual_first_scorer = selected_match.get("first_scorer")
+
+    if actual_first_scorer:
+        st.info(f"Faktisk första målskytt: {actual_first_scorer}")
+    else:
+        st.warning(
+            "Ingen faktisk första målskytt är sparad för denna match ännu. "
+            "Fyll i den under Resultat-fliken."
+        )
+
     st.markdown(
         f"### {selected_match['home_team']} – {selected_match['away_team']}"
     )

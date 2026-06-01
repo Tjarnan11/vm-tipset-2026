@@ -634,7 +634,7 @@ def render_locked_knockout_prediction_card(
     )
 
     st.caption(
-        f"Match {match['match_no']} · {kickoff_text}"
+        f"Match {match['match_no']} · {kickoff_text} svensk tid."
     )
 
     st.markdown(
@@ -786,27 +786,35 @@ def render_knockout_round_prediction_form(
     incomplete_matches = []
     invalid_goal_matches = []
 
+    
+
     with st.form(f"knockout_predictions_form_{round_id}"):
+
+        submitted_top = st.form_submit_button(
+                "Spara slutspelstips",
+                key=f"save_knockout_predictions_top_{round_id}",
+            )
+
         for match in matches:
             existing = predictions_by_match_id.get(match["id"])
 
             with st.container(border=True):
+
+                kickoff_at = match.get("kickoff_at")
+
+                kickoff_text = (
+                    format_datetime_swedish(kickoff_at)
+                    if kickoff_at
+                    else "Avspark ej satt"
+                )
+
                 st.caption(
-                    f"Match {match['match_no']}"
+                    f"Match {match['match_no']} · {kickoff_text} svensk tid"
                 )
 
                 st.markdown(
                     f"### {match['home_team']} – {match['away_team']}"
                 )
-
-                kickoff_at = match.get("kickoff_at")
-
-                if kickoff_at:
-                    st.caption(
-                        f"Avspark: {format_datetime_swedish(kickoff_at)} svensk tid"
-                    )
-                else:
-                    st.caption("Avspark: ej satt")
 
                 existing_home_goals = (
                     str(existing["predicted_home_goals"])
@@ -918,7 +926,12 @@ def render_knockout_round_prediction_form(
                     }
                 )
 
-        submitted = st.form_submit_button("Spara slutspelstips")
+        submitted_bottom = st.form_submit_button(
+            "Spara slutspelstips",
+            key=f"save_knockout_predictions_bottom_{round_id}",
+        )
+
+    submitted = submitted_top or submitted_bottom
 
     if submitted:
         if invalid_goal_matches:
