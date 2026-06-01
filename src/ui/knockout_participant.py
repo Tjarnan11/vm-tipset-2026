@@ -247,9 +247,9 @@ def render_knockout_rules_section() -> None:
 
         Du kan få max **8 poäng per match**:
 
-        - **1 poäng** för rätt 1/X/2 efter fulltid
-        - **1 poäng** för rätt över/under 2,5 mål efter fulltid
-        - **2 poäng** för exakt rätt resultat efter fulltid
+        - **1 poäng** för rätt 1/X/2 efter ordinarie tid
+        - **1 poäng** för rätt över/under 2,5 mål efter ordinarie tid
+        - **2 poäng** för exakt rätt resultat efter ordinarie tid
         - **4 poäng** för rätt första målskytt
 
         Om du har exakt rätt resultat får du också rätt 1/X/2.
