@@ -313,9 +313,9 @@ def render_knockout_final_prediction_section(
         else:
             st.error("Kunde inte spara finaltipset.")
 
-        st.divider()
+    st.divider()
 
-        render_all_knockout_final_predictions_section()
+    render_all_knockout_final_predictions_section()
 
 
 def render_knockout_final_admin_section() -> None:
