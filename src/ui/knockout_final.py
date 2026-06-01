@@ -156,7 +156,7 @@ def render_all_knockout_final_predictions_section() -> None:
                             else "-"
                         )
                     ),
-                    "Poäng": final_score["points"],
+                    "Poäng": str(final_score["points"]),
                 }
             )
         else:
