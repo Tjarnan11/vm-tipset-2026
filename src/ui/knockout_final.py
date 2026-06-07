@@ -66,10 +66,37 @@ def is_final_prediction_public() -> bool:
     """
     Kontrollerar om finaltipsen ska visas för alla.
 
-    För MVP visas allas finaltips när finaltipsen inte längre är öppna.
+    Finaltipsen ska bara vara offentliga när första slutspelsrundan
+    är låst/färdig eller när dess deadline har passerat.
+
+    Viktigt:
+    - not_started ska inte vara publikt
+    - open med deadline i framtiden ska inte vara publikt
     """
 
-    return not is_final_prediction_open()
+    rounds = get_knockout_rounds()
+
+    if not rounds:
+        return False
+
+    first_round = sorted(
+        rounds,
+        key=lambda knockout_round: knockout_round["sort_order"],
+    )[0]
+
+    status = first_round.get("status", "not_started")
+    deadline_at = first_round.get("deadline_at")
+
+    deadline_passed = (
+        is_deadline_passed(deadline_at)
+        if deadline_at
+        else False
+    )
+
+    return (
+        status in {"locked", "finished"}
+        or deadline_passed
+    )
 
 def is_final_prediction_open() -> bool:
     """
