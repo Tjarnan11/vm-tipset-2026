@@ -47,6 +47,8 @@ from src.ui.rules import render_rules_section
 
 from src.ui.knockout_participant import render_knockout_participant_section
 
+from src.ui.group_stage_stats import render_group_stage_stats_section
+
 
 def render_locked_prediction_card(
     match: dict,
@@ -604,6 +606,7 @@ def render_participant_page(token: str) -> None:
             tab_leaderboard,
             tab_predictions,
             tab_matches,
+            tab_stats,
         ) = st.tabs(
             [
                 "📝 Tippa",
@@ -611,6 +614,7 @@ def render_participant_page(token: str) -> None:
                 "📊 Tabell",
                 "🧾 Allas tips",
                 "📅 Matcher & resultat",
+                "📈 Statistik",
             ]
         )
 
@@ -662,6 +666,12 @@ def render_participant_page(token: str) -> None:
             render_public_matches_results_section(
                 predictions_locked=predictions_locked,
             )
+
+        with tab_stats:
+            if predictions_locked:
+                render_group_stage_stats_section()
+            else:
+                st.info("Gruppspelsstatistik visas när deadline har passerat.")
     
     with tab_knockout:
         render_knockout_participant_section(participant)
