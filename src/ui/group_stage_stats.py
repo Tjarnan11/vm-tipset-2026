@@ -568,6 +568,8 @@ def _render_points_over_time_stats(
         st.line_chart(
             chart_df[selected_participants],
             height=420,
+            x_label="Matchnummer",
+            y_label="Totalpoäng",   
         )
     else:
         st.info("Välj minst en deltagare för att visa grafen.")
