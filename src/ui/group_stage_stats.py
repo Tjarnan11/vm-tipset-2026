@@ -405,6 +405,228 @@ def _render_uniqueness_stats(df: pd.DataFrame) -> None:
         hide_index=True,
     )
 
+def _get_actual_outcome(match: dict) -> str | None:
+    home_goals = _get(match, "home_goals")
+    away_goals = _get(match, "away_goals")
+
+    if home_goals is None or away_goals is None:
+        return None
+
+    if home_goals > away_goals:
+        return "1"
+
+    if home_goals < away_goals:
+        return "2"
+
+    return "X"
+
+
+def _get_actual_goals_pick(match: dict) -> str | None:
+    home_goals = _get(match, "home_goals")
+    away_goals = _get(match, "away_goals")
+
+    if home_goals is None or away_goals is None:
+        return None
+
+    total_goals = int(home_goals) + int(away_goals)
+
+    if total_goals > 2.5:
+        return "over"
+
+    return "under"
+
+
+def _score_group_stage_prediction(prediction: dict, match: dict) -> int:
+    actual_outcome = _get_actual_outcome(match)
+    actual_goals_pick = _get_actual_goals_pick(match)
+
+    if actual_outcome is None or actual_goals_pick is None:
+        return 0
+
+    outcome_pick = _get(prediction, "outcome_pick")
+    goals_pick = _get(prediction, "goals_pick")
+
+    points = 0
+
+    if outcome_pick == actual_outcome:
+        points += 1
+
+    if goals_pick == actual_goals_pick:
+        points += 1
+
+    return points
+
+
+def _render_points_over_time_stats(
+    participants: list[dict],
+    matches: list[dict],
+    predictions: list[dict],
+) -> None:
+    st.subheader("Poängutveckling över tid")
+
+    st.caption(
+        "Grafen visar deltagarnas totalpoäng efter varje färdigspelad gruppspelsmatch."
+    )
+
+    finished_matches = [
+        match
+        for match in matches
+        if _get(match, "status") == "finished"
+        and _get(match, "home_goals") is not None
+        and _get(match, "away_goals") is not None
+    ]
+
+    if not finished_matches:
+        st.info("Poängutvecklingen visas när minst en match är färdigspelad.")
+        return
+
+    finished_matches = sorted(
+        finished_matches,
+        key=lambda match: (
+            _get(match, "kickoff_at", default=""),
+            _get_match_number(match),
+        ),
+    )
+
+    participants_by_id = {
+        participant["id"]: participant
+        for participant in participants
+    }
+
+    prediction_by_participant_and_match = {
+        (
+            prediction["participant_id"],
+            prediction["match_id"],
+        ): prediction
+        for prediction in predictions
+    }
+
+    cumulative_points = {
+        participant_id: 0
+        for participant_id in participants_by_id
+    }
+
+    rows = []
+
+    for match in finished_matches:
+        match_id = match["id"]
+        match_number = _get_match_number(match)
+        match_label = _format_match_label(match)
+
+        for participant_id, participant in participants_by_id.items():
+            prediction = prediction_by_participant_and_match.get(
+                (participant_id, match_id)
+            )
+
+            if prediction:
+                cumulative_points[participant_id] += _score_group_stage_prediction(
+                    prediction,
+                    match,
+                )
+
+            participant_name = _get(
+                participant,
+                "name",
+                "display_name",
+                default="Okänd deltagare",
+            )
+
+            rows.append(
+                {
+                    "Matchnummer": match_number,
+                    "Match": match_label,
+                    "Deltagare": participant_name,
+                    "Poäng": cumulative_points[participant_id],
+                }
+            )
+
+    points_df = pd.DataFrame(rows)
+
+    if points_df.empty:
+        st.info("Det finns ingen poängdata att visa ännu.")
+        return
+
+    chart_df = points_df.pivot(
+        index="Matchnummer",
+        columns="Deltagare",
+        values="Poäng",
+    ).sort_index()
+
+    participant_names = list(chart_df.columns)
+
+    selected_participants = st.multiselect(
+        "Deltagare i grafen",
+        options=participant_names,
+        default=participant_names,
+    )
+
+    st.caption(
+        "Alla deltagare visas från början. Välj färre namn för att jämföra specifika personer."
+    )
+
+    if selected_participants:
+        st.line_chart(
+            chart_df[selected_participants],
+            height=420,
+        )
+    else:
+        st.info("Välj minst en deltagare för att visa grafen.")
+
+    
+    latest_match_number = points_df["Matchnummer"].max()
+    previous_match_number = (
+        points_df[points_df["Matchnummer"] < latest_match_number]["Matchnummer"].max()
+        if len(points_df["Matchnummer"].unique()) > 1
+        else None
+    )
+
+    latest_rows = points_df[
+        points_df["Matchnummer"] == latest_match_number
+    ].copy()
+
+    if previous_match_number is not None:
+        previous_rows = points_df[
+            points_df["Matchnummer"] == previous_match_number
+        ][["Deltagare", "Poäng"]].rename(
+            columns={"Poäng": "Poäng före senaste match"}
+        )
+
+        latest_rows = latest_rows.merge(
+            previous_rows,
+            on="Deltagare",
+            how="left",
+        )
+
+        latest_rows["Poäng senaste match"] = (
+            latest_rows["Poäng"]
+            - latest_rows["Poäng före senaste match"].fillna(0)
+        )
+    else:
+        latest_rows["Poäng senaste match"] = latest_rows["Poäng"]
+
+    latest_rows = latest_rows.rename(
+        columns={"Poäng": "Totalpoäng"}
+    )
+
+    st.markdown("#### Ställning efter senaste färdiga match")
+
+    st.dataframe(
+        latest_rows[
+            [
+                "Deltagare",
+                "Totalpoäng",
+                "Poäng senaste match",
+            ]
+        ].sort_values(
+            ["Totalpoäng", "Poäng senaste match", "Deltagare"],
+            ascending=[False, False, True],
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+
+    
+
 
 def render_group_stage_stats_section() -> None:
     st.header("📈 Gruppspelsstatistik")
@@ -436,6 +658,7 @@ def render_group_stage_stats_section() -> None:
 
     participants = get_active_participants()
     matches = get_matches()
+
     predictions = get_all_predictions()
 
     if not participants:
@@ -463,11 +686,12 @@ def render_group_stage_stats_section() -> None:
         st.info("Det finns inga tips att visa statistik för ännu.")
         return
 
-    tab_profiles, tab_matches, tab_unique = st.tabs(
+    tab_profiles, tab_matches, tab_unique, tab_progress = st.tabs(
         [
             "Deltagarprofiler",
             "Matcher",
             "Unikhet",
+            "Poäng över tid",
         ]
     )
 
@@ -479,3 +703,10 @@ def render_group_stage_stats_section() -> None:
 
     with tab_unique:
         _render_uniqueness_stats(df)
+
+    with tab_progress:
+        _render_points_over_time_stats(
+            participants,
+            matches,
+            predictions,
+        )
