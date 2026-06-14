@@ -610,7 +610,11 @@ def _render_points_over_time_stats(
         columns={"Poäng": "Totalpoäng"}
     )
 
-    st.markdown("#### Ställning efter senaste färdiga match")
+    st.markdown("#### Poäng efter senaste färdiga match")
+
+    st.caption(
+        "Den officiella placeringen visas i huvudtabellen, där även bonusmål och rätt 1/X/2 används vid lika poäng."
+    )
 
     st.dataframe(
         latest_rows[

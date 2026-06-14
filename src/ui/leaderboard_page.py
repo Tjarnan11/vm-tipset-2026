@@ -69,17 +69,22 @@ def render_leaderboard_section() -> None:
         bonus_results=bonus_results,
     )
 
+    st.caption(
+        "Sortering: 1) totalpoäng, 2) mål från bonusspelare, 3) flest rätt 1/X/2. "
+        "Om allt detta är lika får deltagarna delad placering."
+    )
+
     leaderboard_df = pd.DataFrame(leaderboard)
 
     visible_columns = [
         "Placering",
         "Namn",
         "Poäng",
-        "Bonusspelare",
         "Bonusmål",
         "Rätt 1X2",
         "Rätt Ö/U",
         "Räknade matcher",
+        "Bonusspelare",
     ]
 
     leaderboard_df = leaderboard_df[visible_columns]
