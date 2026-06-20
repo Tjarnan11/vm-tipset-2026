@@ -9,6 +9,7 @@ from datetime import date, time
 
 import pandas as pd
 import streamlit as st
+import re
 
 from src.deadline import (
     build_deadline_iso_from_swedish_time,
@@ -38,6 +39,8 @@ from src.ui.knockout_final import (
     render_knockout_final_admin_section,
     render_knockout_final_review_admin_section,
 )
+
+from src.repositories.matches_repo import get_matches
 
 
 def render_knockout_matches_table() -> None:
@@ -653,6 +656,116 @@ def render_first_scorer_admin_section() -> None:
         else:
             st.error("Kunde inte spara målskytt-bedömningen.")
 
+def _get_all_group_stage_teams() -> list[str]:
+    matches = get_matches()
+
+    teams = set()
+
+    for match in matches:
+        home_team = match.get("home_team")
+        away_team = match.get("away_team")
+
+        if home_team:
+            teams.add(home_team)
+
+        if away_team:
+            teams.add(away_team)
+
+    return sorted(teams)
+
+
+def _get_teams_by_group() -> dict[str, list[str]]:
+    matches = get_matches()
+
+    teams_by_group: dict[str, set[str]] = {}
+
+    for match in matches:
+        group_name = match.get("group_name")
+
+        if not group_name:
+            continue
+
+        group_name = str(group_name).upper()
+
+        teams_by_group.setdefault(group_name, set())
+
+        home_team = match.get("home_team")
+        away_team = match.get("away_team")
+
+        if home_team:
+            teams_by_group[group_name].add(home_team)
+
+        if away_team:
+            teams_by_group[group_name].add(away_team)
+
+    return {
+        group_name: sorted(teams)
+        for group_name, teams in teams_by_group.items()
+    }
+
+
+def _extract_group_letters_from_placeholder(placeholder: str | None) -> list[str]:
+    if not placeholder:
+        return []
+
+    text = str(placeholder).upper()
+
+    # Fångar både:
+    # - "Grupp A"
+    # - "Grupp A/C/D/E"
+    # - "A/C/D/E"
+    #
+    # Begränsat till gruppbokstäver A-L.
+    group_letters = re.findall(r"\b[A-L]\b", text)
+
+    return sorted(set(group_letters))
+
+
+def _get_candidate_teams_for_placeholder(
+    placeholder: str | None,
+    teams_by_group: dict[str, list[str]],
+    all_teams: list[str],
+) -> tuple[list[str], str]:
+    group_letters = _extract_group_letters_from_placeholder(placeholder)
+
+    if not group_letters:
+        return all_teams, "Visar alla lag eftersom platsen inte kunde kopplas till en specifik grupp."
+
+    candidate_teams = []
+
+    for group_letter in group_letters:
+        candidate_teams.extend(teams_by_group.get(group_letter, []))
+
+    candidate_teams = sorted(set(candidate_teams))
+
+    if not candidate_teams:
+        return all_teams, "Visar alla lag eftersom gruppkandidater saknas."
+
+    if len(group_letters) == 1:
+        help_text = f"Förslag från grupp {group_letters[0]}."
+
+    else:
+        groups_text = ", ".join(group_letters)
+        help_text = f"Förslag från grupperna {groups_text}."
+
+    return candidate_teams, help_text
+
+
+def _build_team_select_options(
+    candidate_teams: list[str],
+    current_team: str | None,
+) -> list[str]:
+    options = [""]
+
+    for team in candidate_teams:
+        if team not in options:
+            options.append(team)
+
+    if current_team and current_team not in options:
+        options.append(current_team)
+
+    return options
+
 def render_knockout_team_update_form() -> None:
     """
     Formulär där admin kan ersätta placeholders med faktiska lag.
@@ -676,15 +789,21 @@ def render_knockout_team_update_form() -> None:
         st.info("Inga slutspelsmatcher finns ännu.")
         return
 
+    all_teams = _get_all_group_stage_teams()
+    teams_by_group = _get_teams_by_group()
+
     match_label_by_id = {}
 
     for match in matches:
         round_info = match.get("knockout_rounds") or {}
         round_name = round_info.get("name", "Okänd runda")
 
+        home_placeholder = match.get("home_placeholder") or match.get("home_team")
+        away_placeholder = match.get("away_placeholder") or match.get("away_team")
+
         match_label_by_id[match["id"]] = (
             f"Match {match['match_no']} · {round_name} – "
-            f"{match['home_team']} vs {match['away_team']}"
+            f"{home_placeholder} vs {away_placeholder}"
         )
 
     selected_match_id = st.selectbox(
@@ -699,25 +818,109 @@ def render_knockout_team_update_form() -> None:
         if match["id"] == selected_match_id
     )
 
+    current_home_team = selected_match.get("home_team") or ""
+    current_away_team = selected_match.get("away_team") or ""
+
+    home_placeholder = selected_match.get("home_placeholder") or current_home_team
+    away_placeholder = selected_match.get("away_placeholder") or current_away_team
+
+    home_candidates, home_help_text = _get_candidate_teams_for_placeholder(
+        home_placeholder,
+        teams_by_group,
+        all_teams,
+    )
+
+    away_candidates, away_help_text = _get_candidate_teams_for_placeholder(
+        away_placeholder,
+        teams_by_group,
+        all_teams,
+    )
+
+    home_options = _build_team_select_options(
+        home_candidates,
+        current_home_team,
+    )
+
+    away_options = _build_team_select_options(
+        away_candidates,
+        current_away_team,
+    )
+
+    home_index = (
+        home_options.index(current_home_team)
+        if current_home_team in home_options
+        else 0
+    )
+
+    away_index = (
+        away_options.index(current_away_team)
+        if current_away_team in away_options
+        else 0
+    )
+
+    st.caption(
+        f"Originalplatser: **{home_placeholder}** – **{away_placeholder}**"
+    )
+
     with st.form("knockout_team_update_form"):
-        home_team = st.text_input(
-            "Lag 1",
-            value=selected_match["home_team"],
+        col_home, col_away = st.columns(2)
+
+        with col_home:
+            selected_home_team = st.selectbox(
+                "Lag 1",
+                options=home_options,
+                index=home_index,
+                format_func=lambda value: value if value else "Välj lag",
+                help=home_help_text,
+                key=f"knockout_home_team_{selected_match_id}",
+            )
+
+        with col_away:
+            selected_away_team = st.selectbox(
+                "Lag 2",
+                options=away_options,
+                index=away_index,
+                format_func=lambda value: value if value else "Välj lag",
+                help=away_help_text,
+                key=f"knockout_away_team_{selected_match_id}",
+            )
+
+        col_save, col_reset = st.columns(2)
+
+        with col_save:
+            submitted = st.form_submit_button("Spara lag")
+
+        with col_reset:
+            reset_submitted = st.form_submit_button("Återställ till originalplatser")
+
+    if reset_submitted:
+        if not home_placeholder or not away_placeholder:
+            st.error("Originalplatser saknas för den här matchen.")
+            return
+
+        updated_match = update_knockout_match_teams(
+            match_id=selected_match_id,
+            home_team=home_placeholder,
+            away_team=away_placeholder,
         )
 
-        away_team = st.text_input(
-            "Lag 2",
-            value=selected_match["away_team"],
-        )
+        if updated_match:
+            st.success(
+                f"Match {selected_match['match_no']} återställd till: "
+                f"{home_placeholder} – {away_placeholder}"
+            )
+            st.info("Ladda om sidan för att se uppdateringen i tabellen.")
+        else:
+            st.error("Kunde inte återställa lagen.")
 
-        submitted = st.form_submit_button("Spara lag")
+        return
 
     if submitted:
-        cleaned_home_team = home_team.strip()
-        cleaned_away_team = away_team.strip()
+        cleaned_home_team = selected_home_team.strip()
+        cleaned_away_team = selected_away_team.strip()
 
         if not cleaned_home_team or not cleaned_away_team:
-            st.error("Båda lagen måste fyllas i.")
+            st.error("Båda lagen måste väljas.")
             return
 
         updated_match = update_knockout_match_teams(
@@ -734,7 +937,6 @@ def render_knockout_team_update_form() -> None:
             st.info("Ladda om sidan för att se uppdateringen i tabellen.")
         else:
             st.error("Kunde inte uppdatera lagen.")
-
 
 def render_knockout_rounds_admin_section() -> None:
     """
