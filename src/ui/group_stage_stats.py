@@ -457,6 +457,295 @@ def _score_group_stage_prediction(prediction: dict, match: dict) -> int:
     return points
 
 
+def _build_match_points_df(
+    participants: list[dict],
+    matches: list[dict],
+    predictions: list[dict],
+) -> pd.DataFrame:
+    finished_matches = [
+        match
+        for match in matches
+        if _get(match, "status") == "finished"
+        and _get(match, "home_goals") is not None
+        and _get(match, "away_goals") is not None
+    ]
+
+    finished_matches = sorted(
+        finished_matches,
+        key=lambda match: (
+            _get(match, "kickoff_at", default=""),
+            _get_match_number(match),
+        ),
+    )
+
+    participants_by_id = {
+        participant["id"]: participant
+        for participant in participants
+    }
+
+    prediction_by_participant_and_match = {
+        (
+            prediction["participant_id"],
+            prediction["match_id"],
+        ): prediction
+        for prediction in predictions
+    }
+
+    cumulative_points = {
+        participant_id: 0
+        for participant_id in participants_by_id
+    }
+
+    rows = []
+
+    for match in finished_matches:
+        match_id = match["id"]
+        match_number = _get_match_number(match)
+        match_label = _format_match_label(match)
+        result_label = f"{match.get('home_goals')}–{match.get('away_goals')}"
+
+        for participant_id, participant in participants_by_id.items():
+            prediction = prediction_by_participant_and_match.get(
+                (participant_id, match_id)
+            )
+
+            participant_name = _get(
+                participant,
+                "name",
+                "display_name",
+                default="Okänd deltagare",
+            )
+
+            match_points = (
+                _score_group_stage_prediction(prediction, match)
+                if prediction
+                else 0
+            )
+
+            cumulative_points[participant_id] += match_points
+
+            rows.append(
+                {
+                    "Matchnummer": match_number,
+                    "Match": match_label,
+                    "Resultat": result_label,
+                    "Deltagare": participant_name,
+                    "Matchpoäng": match_points,
+                    "Totalpoäng": cumulative_points[participant_id],
+                    "2-poängare": match_points == 2,
+                    "1-poängare": match_points == 1,
+                    "0-poängare": match_points == 0,
+                }
+            )
+
+    points_df = pd.DataFrame(rows)
+
+    if points_df.empty:
+        return points_df
+
+    points_df = points_df.sort_values(["Matchnummer", "Deltagare"])
+
+    points_df["Placering"] = points_df.groupby("Matchnummer")[
+        "Totalpoäng"
+    ].rank(
+        method="min",
+        ascending=False,
+    ).astype(int)
+
+    return points_df
+
+
+def _render_form_stats(
+    participants: list[dict],
+    matches: list[dict],
+    predictions: list[dict],
+) -> None:
+    st.subheader("Formtabell")
+
+    st.caption(
+        "Visar vilka som tagit flest poäng under vald period. "
+        "Tabellen sorteras på periodpoäng. "
+        "Officiell placering och tiebreakers visas i huvudtabellen."
+    )
+
+    points_df = _build_match_points_df(
+        participants,
+        matches,
+        predictions,
+    )
+
+    if points_df.empty:
+        st.info("Formtabellen visas när minst en match är färdigspelad.")
+        return
+
+    available_match_numbers = sorted(points_df["Matchnummer"].unique())
+
+    max_window_size = len(available_match_numbers)
+
+    window_size = st.slider(
+        "Antal senaste matcher",
+        min_value=1,
+        max_value=max_window_size,
+        value=min(5, max_window_size),
+        step=1,
+        key="group_stage_form_window_size",
+    )
+
+    st.caption(
+        f"Visar form över de {window_size} senaste färdigspelade matcherna."
+    )
+
+    window_match_numbers = available_match_numbers[-window_size:]
+
+    if not window_match_numbers:
+        st.info("Det finns inga matcher i vald period.")
+        return
+
+    latest_match_number = window_match_numbers[-1]
+
+    period_df = points_df[
+        points_df["Matchnummer"].isin(window_match_numbers)
+    ].copy()
+
+    latest_rows = points_df[
+        points_df["Matchnummer"] == latest_match_number
+    ][
+        [
+            "Deltagare",
+            "Totalpoäng",
+        ]
+    ].rename(
+        columns={
+            "Totalpoäng": "Totalpoäng nu",
+        }
+    )
+
+    form_df = (
+        period_df.groupby("Deltagare")
+        .agg(
+            Periodpoäng=("Matchpoäng", "sum"),
+            Tvåpoängare=("2-poängare", "sum"),
+            Enpoängare=("1-poängare", "sum"),
+            Nollpoängare=("0-poängare", "sum"),
+        )
+        .reset_index()
+    )
+
+    form_df = form_df.merge(
+        latest_rows,
+        on="Deltagare",
+        how="left",
+    )
+
+    st.dataframe(
+        form_df[
+            [
+                "Deltagare",
+                "Periodpoäng",
+                "Tvåpoängare",
+                "Enpoängare",
+                "Nollpoängare",
+                "Totalpoäng nu",
+            ]
+        ].sort_values(
+            [
+                "Periodpoäng",
+                "Tvåpoängare",
+                "Totalpoäng nu",
+                "Deltagare",
+            ],
+            ascending=[False, False, False, True],
+        ),
+        width="stretch",
+        hide_index=True,
+    )
+
+
+def _render_group_match_difficulty_stats(
+    participants: list[dict],
+    matches: list[dict],
+    predictions: list[dict],
+) -> None:
+    st.subheader("Gruppens bästa och svåraste matcher")
+
+    st.caption(
+        "Visar vilka matcher gruppen tillsammans tippade bäst respektive sämst på. "
+        "Maxpoäng per match är antal deltagare × 2."
+    )
+
+    points_df = _build_match_points_df(
+        participants,
+        matches,
+        predictions,
+    )
+
+    if points_df.empty:
+        st.info("Matchstatistik visas när minst en match är färdigspelad.")
+        return
+
+    participant_count = points_df["Deltagare"].nunique()
+    max_points = participant_count * 2
+
+    match_summary_df = (
+        points_df.groupby(["Matchnummer", "Match", "Resultat"])
+        .agg(
+            Grupppoäng=("Matchpoäng", "sum"),
+            Tvåpoängare=("2-poängare", "sum"),
+            Enpoängare=("1-poängare", "sum"),
+            Nollpoängare=("0-poängare", "sum"),
+        )
+        .reset_index()
+    )
+
+    match_summary_df["Maxpoäng"] = max_points
+    match_summary_df["Poängandel"] = (
+        100 * match_summary_df["Grupppoäng"] / match_summary_df["Maxpoäng"]
+    ).round().astype(int)
+
+    st.markdown("##### Bäst tippade matcher")
+
+    st.dataframe(
+        match_summary_df.sort_values(
+            ["Grupppoäng", "Tvåpoängare", "Matchnummer"],
+            ascending=[False, False, True],
+        )
+        .head(10)[
+            [
+                "Match",
+                "Resultat",
+                "Grupppoäng",
+                "Maxpoäng",
+                "Poängandel",
+                "Tvåpoängare",
+                "Nollpoängare",
+            ]
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.markdown("##### Svåraste matcher")
+
+    st.dataframe(
+        match_summary_df.sort_values(
+            ["Grupppoäng", "Tvåpoängare", "Matchnummer"],
+            ascending=[True, True, True],
+        )
+        .head(10)[
+            [
+                "Match",
+                "Resultat",
+                "Grupppoäng",
+                "Maxpoäng",
+                "Poängandel",
+                "Tvåpoängare",
+                "Nollpoängare",
+            ]
+        ],
+        width="stretch",
+        hide_index=True,
+    )
+
 def _render_points_over_time_stats(
     participants: list[dict],
     matches: list[dict],
@@ -692,12 +981,19 @@ def render_group_stage_stats_section() -> None:
         st.info("Det finns inga tips att visa statistik för ännu.")
         return
 
-    tab_profiles, tab_matches, tab_unique, tab_progress = st.tabs(
+    (
+        tab_profiles,
+        tab_matches,
+        tab_unique,
+        tab_progress,
+        tab_form,
+    ) = st.tabs(
         [
             "Deltagarprofiler",
             "Matcher",
             "Unikhet",
             "Poäng över tid",
+            "Form & matcher",
         ]
     )
 
@@ -712,6 +1008,21 @@ def render_group_stage_stats_section() -> None:
 
     with tab_progress:
         _render_points_over_time_stats(
+            participants,
+            matches,
+            predictions,
+        )
+
+    with tab_form:
+        _render_form_stats(
+            participants,
+            matches,
+            predictions,
+        )
+
+        st.divider()
+
+        _render_group_match_difficulty_stats(
             participants,
             matches,
             predictions,
