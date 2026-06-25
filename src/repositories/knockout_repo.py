@@ -327,7 +327,6 @@ def get_knockout_final_prediction_for_participant(
 
     return None
 
-
 def save_knockout_final_prediction(
     participant_id: str,
     finalist_1: str,
@@ -361,6 +360,21 @@ def save_knockout_final_prediction(
 
     return None
 
+def delete_knockout_final_prediction(participant_id: str) -> bool:
+    """
+    Tar bort en deltagares finaltips.
+    """
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("knockout_final_predictions")
+        .delete()
+        .eq("participant_id", participant_id)
+        .execute()
+    )
+
+    return response is not None
 
 def get_all_knockout_final_predictions() -> list[dict]:
     """

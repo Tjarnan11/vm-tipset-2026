@@ -15,6 +15,7 @@ from src.repositories.knockout_repo import (
     save_knockout_final_prediction,
     save_knockout_final_result,
     update_knockout_final_prediction_review,
+    delete_knockout_final_prediction,
 )
 from src.repositories.participants_repo import get_active_participants
 from src.knockout_scoring import calculate_knockout_final_points
@@ -249,19 +250,19 @@ def render_knockout_final_prediction_section(
     )
 
     existing_finalist_1 = (
-        existing_prediction.get("finalist_1", "")
+        existing_prediction.get("finalist_1") or ""
         if existing_prediction
         else ""
     )
 
     existing_finalist_2 = (
-        existing_prediction.get("finalist_2", "")
+        existing_prediction.get("finalist_2") or ""
         if existing_prediction
         else ""
     )
 
     existing_winner = (
-        existing_prediction.get("winner", "")
+        existing_prediction.get("winner") or ""
         if existing_prediction
         else ""
     )
@@ -298,9 +299,9 @@ def render_knockout_final_prediction_section(
         key=f"final_prediction_finalist_2_{participant_id}",
     )
 
-    cleaned_finalist_1_preview = finalist_1.strip()
-    cleaned_finalist_2_preview = finalist_2.strip()
-    existing_winner_clean = existing_winner.strip()
+    cleaned_finalist_1_preview = (finalist_1 or "").strip()
+    cleaned_finalist_2_preview = (finalist_2 or "").strip()
+    existing_winner_clean = (existing_winner or "").strip()
 
     winner_options = []
 
@@ -348,10 +349,43 @@ def render_knockout_final_prediction_section(
         key=f"save_final_prediction_{participant_id}",
     )
 
+    clear_submitted = False
+
+    if existing_prediction:
+        st.caption(
+            "Du kan rensa ditt finaltips fram till första slutspelsrundans deadline."
+        )
+
+        clear_submitted = st.button(
+            "Rensa finaltips",
+            key=f"clear_final_prediction_{participant_id}",
+        )
+
+    if clear_submitted:
+        deleted = delete_knockout_final_prediction(participant_id)
+
+        if deleted:
+            st.session_state.pop(
+                f"final_prediction_finalist_1_{participant_id}",
+                None,
+            )
+            st.session_state.pop(
+                f"final_prediction_finalist_2_{participant_id}",
+                None,
+            )
+            st.session_state.pop(
+                f"final_prediction_winner_{participant_id}",
+                None,
+            )
+            st.toast("Finaltips rensat 🗑️", icon="🗑️")
+            st.rerun()
+        else:
+            st.error("Kunde inte rensa finaltipset.")
+
     if submitted:
-        cleaned_finalist_1 = finalist_1.strip()
-        cleaned_finalist_2 = finalist_2.strip()
-        cleaned_winner = winner.strip()
+        cleaned_finalist_1 = (finalist_1 or "").strip()
+        cleaned_finalist_2 = (finalist_2 or "").strip()
+        cleaned_winner = (winner or "").strip()
 
         if not cleaned_finalist_1 or not cleaned_finalist_2 or not cleaned_winner:
             st.error("Alla tre fält måste fyllas i.")
@@ -426,21 +460,21 @@ def render_knockout_final_admin_section() -> None:
 
     finalist_1 = st.text_input(
         "Finalist 1",
-        value=existing_finalist_1,
+        value=existing_finalist_1 or "",
         placeholder="Exempel: Brasilien",
         key="final_result_finalist_1",
     )
 
     finalist_2 = st.text_input(
         "Finalist 2",
-        value=existing_finalist_2,
+        value=existing_finalist_2 or "",
         placeholder="Exempel: Frankrike",
         key="final_result_finalist_2",
     )
 
-    cleaned_finalist_1_preview = finalist_1.strip()
-    cleaned_finalist_2_preview = finalist_2.strip()
-    existing_winner_clean = existing_winner.strip()
+    cleaned_finalist_1_preview = (finalist_1 or "").strip()
+    cleaned_finalist_2_preview = (finalist_2 or "").strip()
+    existing_winner_clean = (existing_winner or "").strip()
 
     winner_options = []
 
@@ -489,9 +523,9 @@ def render_knockout_final_admin_section() -> None:
     )
 
     if submitted:
-        cleaned_finalist_1 = finalist_1.strip()
-        cleaned_finalist_2 = finalist_2.strip()
-        cleaned_winner = winner.strip()
+        cleaned_finalist_1 = (finalist_1 or "").strip()
+        cleaned_finalist_2 = (finalist_2 or "").strip()
+        cleaned_winner = (winner or "").strip()
 
         if not cleaned_finalist_1 or not cleaned_finalist_2 or not cleaned_winner:
             st.error("Alla tre fält måste fyllas i.")
