@@ -441,6 +441,13 @@ def render_knockout_final_review_admin_section() -> None:
 
     st.subheader("Bedöm finaltips")
 
+    if not is_final_prediction_public():
+        st.info(
+            "Finaltipsen visas först när första slutspelsrundans deadline har passerat "
+            "eller när rundan är låst."
+        )
+        return
+
     participants = get_active_participants()
     final_predictions = get_all_knockout_final_predictions()
 

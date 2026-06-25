@@ -13,6 +13,7 @@ import re
 
 from src.deadline import (
     build_deadline_iso_from_swedish_time,
+    is_deadline_passed,
 )
 
 from src.repositories.knockout_repo import (
@@ -486,6 +487,26 @@ def parse_first_scorer_status(label: str) -> bool | None:
 
     return None
 
+def is_knockout_round_public(knockout_round: dict) -> bool:
+    """
+    Kontrollerar om en slutspelsrundas tips får visas.
+
+    Tips får visas först när:
+    - rundans deadline har passerat
+    - eller rundan är locked/finished
+    """
+
+    status = knockout_round.get("status", "not_started")
+    deadline_at = knockout_round.get("deadline_at")
+
+    deadline_passed = (
+        is_deadline_passed(deadline_at)
+        if deadline_at
+        else False
+    )
+
+    return status in {"locked", "finished"} or deadline_passed
+
 def render_first_scorer_admin_section() -> None:
     """
     Adminsektion för att bedöma första målskytt i slutspelsmatcher.
@@ -495,13 +516,15 @@ def render_first_scorer_admin_section() -> None:
     - Ej bedömt
     - Rätt
     - Fel
+
+    Viktigt:
+    Tipsen visas först när matchens runda är publik.
     """
 
     st.subheader("Bedöm första målskytt")
 
     matches = get_knockout_matches()
     participants = get_active_participants()
-    predictions = get_all_knockout_predictions()
 
     if not matches:
         st.info("Inga slutspelsmatcher finns ännu.")
@@ -509,10 +532,6 @@ def render_first_scorer_admin_section() -> None:
 
     if not participants:
         st.info("Inga deltagare finns ännu.")
-        return
-
-    if not predictions:
-        st.info("Inga slutspelstips finns ännu.")
         return
 
     participant_name_by_id = {
@@ -544,6 +563,21 @@ def render_first_scorer_admin_section() -> None:
         match for match in matches
         if match["id"] == selected_match_id
     )
+
+    selected_round = selected_match.get("knockout_rounds") or {}
+
+    if not is_knockout_round_public(selected_round):
+        st.info(
+            "Första målskytt-tips för den här rundan visas först när rundans "
+            "deadline har passerat eller när rundan är låst."
+        )
+        return
+
+    predictions = get_all_knockout_predictions()
+
+    if not predictions:
+        st.info("Inga slutspelstips finns ännu.")
+        return
 
     actual_first_scorer = selected_match.get("first_scorer")
 
@@ -655,6 +689,7 @@ def render_first_scorer_admin_section() -> None:
             st.info("Ladda om sidan för att se uppdaterad tabell.")
         else:
             st.error("Kunde inte spara målskytt-bedömningen.")
+
 
 def _get_all_group_stage_teams() -> list[str]:
     matches = get_matches()
