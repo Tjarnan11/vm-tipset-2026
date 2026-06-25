@@ -6,6 +6,8 @@
 # deadline/status. Matchinmatning kommer i nästa pass.
 
 from datetime import date, time
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 import pandas as pd
 import streamlit as st
@@ -19,9 +21,10 @@ from src.deadline import (
 from src.repositories.knockout_repo import (
     clear_knockout_match_result,
     get_all_knockout_predictions,
+    get_all_knockout_final_predictions,
     get_knockout_matches,
     get_knockout_round_by_name,
-    get_knockout_rounds,
+    get_knockout_rounds,        
     update_first_scorer_correct,
     update_knockout_match_result,
     update_knockout_match_teams,
@@ -43,6 +46,52 @@ from src.ui.knockout_final import (
 
 from src.repositories.matches_repo import get_matches
 
+
+def _format_admin_updated_at(value) -> str:
+    if not value:
+        return "-"
+
+    try:
+        if isinstance(value, str):
+            datetime_value = datetime.fromisoformat(
+                value.replace("Z", "+00:00")
+            )
+        elif isinstance(value, datetime):
+            datetime_value = value
+        else:
+            return str(value)
+
+        if datetime_value.tzinfo is None:
+            datetime_value = datetime_value.replace(tzinfo=ZoneInfo("UTC"))
+
+        swedish_time = datetime_value.astimezone(
+            ZoneInfo("Europe/Stockholm")
+        )
+
+        month_names = {
+            1: "januari",
+            2: "februari",
+            3: "mars",
+            4: "april",
+            5: "maj",
+            6: "juni",
+            7: "juli",
+            8: "augusti",
+            9: "september",
+            10: "oktober",
+            11: "november",
+            12: "december",
+        }
+
+        month_name = month_names[swedish_time.month]
+
+        return (
+            f"{swedish_time.day} {month_name} {swedish_time.year}, "
+            f"{swedish_time:%H:%M}"
+        )
+
+    except ValueError:
+        return str(value)
 
 def render_knockout_matches_table() -> None:
     """
@@ -973,6 +1022,415 @@ def render_knockout_team_update_form() -> None:
         else:
             st.error("Kunde inte uppdatera lagen.")
 
+def _build_knockout_round_status_rows(
+    participants: list[dict],
+    knockout_round: dict,
+    matches: list[dict],
+    predictions: list[dict],
+) -> list[dict]:
+    round_id = knockout_round["id"]
+
+    round_matches = []
+
+    for match in matches:
+        round_info = match.get("knockout_rounds") or {}
+        match_round_id = match.get("round_id") or round_info.get("id")
+
+        if match_round_id == round_id:
+            round_matches.append(match)
+
+    round_match_ids = {
+        match["id"]
+        for match in round_matches
+    }
+
+    total_matches = len(round_matches)
+
+    predictions_by_participant_id: dict[str, list[dict]] = {}
+
+    for prediction in predictions:
+        participant_id = prediction.get("participant_id")
+        match_id = prediction.get("match_id")
+
+        if not participant_id or match_id not in round_match_ids:
+            continue
+
+        predictions_by_participant_id.setdefault(
+            participant_id,
+            [],
+        ).append(prediction)
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+        participant_predictions = predictions_by_participant_id.get(
+            participant_id,
+            [],
+        )
+
+        prediction_count = len(participant_predictions)
+
+        first_scorer_count = sum(
+            1
+            for prediction in participant_predictions
+            if _has_value(prediction.get("first_scorer_pick"))
+        )
+
+        latest_updated_at = None
+
+        for prediction in participant_predictions:
+            updated_at = prediction.get("updated_at")
+
+            if updated_at and (
+                latest_updated_at is None or updated_at > latest_updated_at
+            ):
+                latest_updated_at = updated_at
+
+        rows.append(
+            {
+                "Deltagare": _get_participant_name(participant),
+                "Matchtips": f"{prediction_count}/{total_matches}",
+                "Första målskytt": (
+                    f"{first_scorer_count}/{prediction_count}"
+                    if prediction_count
+                    else "0/0"
+                ),
+                "Senast uppdaterad": _format_admin_updated_at(latest_updated_at),
+                "_prediction_count": prediction_count,
+                "_first_scorer_count": first_scorer_count,
+            }
+        )
+
+    return rows
+
+
+def _build_knockout_final_status_rows(
+    participants: list[dict],
+    final_predictions: list[dict],
+) -> list[dict]:
+    final_prediction_by_participant_id = {
+        prediction.get("participant_id"): prediction
+        for prediction in final_predictions
+        if prediction.get("participant_id")
+    }
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+        final_prediction = final_prediction_by_participant_id.get(participant_id)
+
+        if not final_prediction:
+            status = "Saknas"
+            updated_at = "-"
+            status_order = 0
+
+        else:
+            has_complete_final_prediction = (
+                _has_value(final_prediction.get("finalist_1"))
+                and _has_value(final_prediction.get("finalist_2"))
+                and _has_value(final_prediction.get("winner"))
+            )
+
+            status = "Sparat" if has_complete_final_prediction else "Påbörjat"
+            updated_at = _format_admin_updated_at(
+                final_prediction.get("updated_at")
+            )
+            status_order = 2 if has_complete_final_prediction else 1
+
+        rows.append(
+            {
+                "Deltagare": _get_participant_name(participant),
+                "Finaltips": status,
+                "Senast uppdaterad": updated_at,
+                "_status_order": status_order,
+            }
+        )
+
+    return rows
+
+def _has_value(value) -> bool:
+    if value is None:
+        return False
+
+    if isinstance(value, str):
+        return bool(value.strip())
+
+    return True
+
+
+def _get_participant_name(participant: dict) -> str:
+    return (
+        participant.get("display_name")
+        or participant.get("name")
+        or "Okänd deltagare"
+    )
+
+
+def _build_knockout_status_rows(
+    participants: list[dict],
+    rounds: list[dict],
+    matches: list[dict],
+    predictions: list[dict],
+    final_predictions: list[dict],
+) -> list[dict]:
+    matches_by_round_id: dict[str, list[dict]] = {}
+
+    for match in matches:
+        round_info = match.get("knockout_rounds") or {}
+        round_id = match.get("round_id") or round_info.get("id")
+
+        if not round_id:
+            continue
+
+        matches_by_round_id.setdefault(round_id, []).append(match)
+
+    match_by_id = {
+        match["id"]: match
+        for match in matches
+    }
+
+    predictions_by_participant_and_round: dict[tuple[str, str], list[dict]] = {}
+
+    for prediction in predictions:
+        participant_id = prediction.get("participant_id")
+        match_id = prediction.get("match_id")
+        match = match_by_id.get(match_id)
+
+        if not participant_id or not match:
+            continue
+
+        round_info = match.get("knockout_rounds") or {}
+        round_id = match.get("round_id") or round_info.get("id")
+
+        if not round_id:
+            continue
+
+        key = (participant_id, round_id)
+        predictions_by_participant_and_round.setdefault(key, []).append(prediction)
+
+    final_prediction_by_participant_id = {
+        prediction.get("participant_id"): prediction
+        for prediction in final_predictions
+        if prediction.get("participant_id")
+    }
+
+    sorted_rounds = sorted(
+        rounds,
+        key=lambda knockout_round: knockout_round.get("sort_order", 999),
+    )
+
+    rows = []
+
+    for participant in participants:
+        participant_id = participant["id"]
+
+        row = {
+            "Deltagare": _get_participant_name(participant),
+        }
+
+        latest_updated_at = None
+
+        for knockout_round in sorted_rounds:
+            round_id = knockout_round["id"]
+            round_name = knockout_round.get("name", "Okänd runda")
+
+            round_matches = matches_by_round_id.get(round_id, [])
+            total_matches = len(round_matches)
+
+            round_predictions = predictions_by_participant_and_round.get(
+                (participant_id, round_id),
+                [],
+            )
+
+            prediction_count = len(round_predictions)
+
+            first_scorer_count = sum(
+                1
+                for prediction in round_predictions
+                if _has_value(prediction.get("first_scorer_pick"))
+            )
+
+            row[round_name] = f"{prediction_count}/{total_matches}"
+
+            row[f"{round_name} målskytt"] = (
+                f"{first_scorer_count}/{prediction_count}"
+                if prediction_count
+                else "0/0"
+            )
+
+            for prediction in round_predictions:
+                updated_at = prediction.get("updated_at")
+
+                if updated_at and (
+                    latest_updated_at is None or updated_at > latest_updated_at
+                ):
+                    latest_updated_at = updated_at
+
+        final_prediction = final_prediction_by_participant_id.get(participant_id)
+
+        if final_prediction:
+            has_complete_final_prediction = (
+                _has_value(final_prediction.get("finalist_1"))
+                and _has_value(final_prediction.get("finalist_2"))
+                and _has_value(final_prediction.get("winner"))
+            )
+
+            row["Finaltips"] = "Sparat" if has_complete_final_prediction else "Påbörjat"
+
+            updated_at = final_prediction.get("updated_at")
+
+            if updated_at and (
+                latest_updated_at is None or updated_at > latest_updated_at
+            ):
+                latest_updated_at = updated_at
+        else:
+            row["Finaltips"] = "Saknas"
+
+        row["Senast uppdaterad"] = latest_updated_at or "-"
+
+        rows.append(row)
+
+    return rows
+
+def render_knockout_participant_status_admin_section() -> None:
+    """
+    Visar adminstatus för slutspelstips utan att avslöja tipsens innehåll.
+    """
+
+    st.subheader("Slutspel – deltagarstatus")
+
+    st.caption(
+        "Här visas bara hur många tips som är sparade per deltagare och runda. "
+        "Själva tipsen visas inte före respektive rundas deadline eller låsning."
+    )
+
+    participants = get_active_participants()
+    rounds = get_knockout_rounds()
+    matches = get_knockout_matches()
+    predictions = get_all_knockout_predictions()
+    final_predictions = get_all_knockout_final_predictions()
+
+    if not participants:
+        st.info("Inga deltagare finns ännu.")
+        return
+
+    if not rounds:
+        st.info("Inga slutspelsrundor finns ännu.")
+        return
+
+    sorted_rounds = sorted(
+        rounds,
+        key=lambda knockout_round: knockout_round.get("sort_order", 999),
+    )
+
+    round_label_by_id = {
+        knockout_round["id"]: knockout_round.get("name", "Okänd runda")
+        for knockout_round in sorted_rounds
+    }
+
+    selected_round_id = st.selectbox(
+        "Välj runda",
+        options=list(round_label_by_id.keys()),
+        format_func=lambda round_id: round_label_by_id[round_id],
+        key="knockout_participant_status_round_select",
+    )
+
+    selected_round = next(
+        knockout_round for knockout_round in sorted_rounds
+        if knockout_round["id"] == selected_round_id
+    )
+
+    round_rows = _build_knockout_round_status_rows(
+        participants=participants,
+        knockout_round=selected_round,
+        matches=matches,
+        predictions=predictions,
+    )
+
+    round_df = pd.DataFrame(round_rows)
+
+    if round_df.empty:
+        st.info("Ingen status att visa för vald runda.")
+    else:
+        total_participants = len(round_df)
+        completed_participants = int(
+            (
+                round_df["_prediction_count"]
+                == round_df["Matchtips"].str.split("/").str[1].astype(int)
+            ).sum()
+        )
+        started_participants = int((round_df["_prediction_count"] > 0).sum())
+
+        total_saved_predictions = int(round_df["_prediction_count"].sum())
+        total_first_scorers = int(round_df["_first_scorer_count"].sum())
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric(
+            "Har påbörjat rundan",
+            f"{started_participants}/{total_participants}",
+        )
+
+        col2.metric(
+            "Har fyllt hela rundan",
+            f"{completed_participants}/{total_participants}",
+        )
+
+        col3.metric(
+            "Första målskytt ifyllt",
+            f"{total_first_scorers}/{total_saved_predictions}",
+        )
+
+        display_round_df = (
+            round_df.sort_values(
+                ["_prediction_count", "_first_scorer_count", "Deltagare"],
+                ascending=[True, True, True],
+            )
+            .drop(
+                columns=[
+                    "_prediction_count",
+                    "_first_scorer_count",
+                ]
+            )
+        )
+
+        st.dataframe(
+            display_round_df,
+            width="stretch",
+            hide_index=True,
+        )
+
+    st.divider()
+
+    st.subheader("Finaltips-status")
+
+    final_rows = _build_knockout_final_status_rows(
+        participants=participants,
+        final_predictions=final_predictions,
+    )
+
+    final_df = pd.DataFrame(final_rows)
+
+    if final_df.empty:
+        st.info("Ingen finaltips-status att visa.")
+        return
+
+    display_final_df = (
+        final_df.sort_values(
+            ["_status_order", "Deltagare"],
+            ascending=[True, True],
+        )
+        .drop(columns=["_status_order"])
+    )
+
+    st.dataframe(
+        display_final_df,
+        width="stretch",
+        hide_index=True,
+    )
+
 def render_knockout_rounds_admin_section() -> None:
     """
     Adminsektion för slutspelsrundor.
@@ -1136,6 +1594,8 @@ def render_knockout_admin_section() -> None:
             "Tips öppnas per runda. En runda är tippbar när status är "
             "`open` och deadline ligger i framtiden."
         )
+
+        render_knockout_participant_status_admin_section()
 
     with tab_rounds:
         render_knockout_rounds_admin_section()
