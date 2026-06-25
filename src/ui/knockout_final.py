@@ -224,7 +224,7 @@ def render_knockout_final_prediction_section(
     st.subheader("Finaltips")
 
     st.info(
-        "Tippa vilka två lag som går till final och vilket lag som vinner finalen. "
+        "Tippa vilka två lag som går till final och vilket lag som vinner finalen (VM-pokalen). "
         "Detta är ett långtidstips för slutspelet."
     )
 
@@ -336,7 +336,7 @@ def render_knockout_final_prediction_section(
             winner = ""
     else:
         st.selectbox(
-            "Vinnare",
+            "Vinnare av VM",
             options=["Fyll i finallag först"],
             disabled=True,
             key=f"final_prediction_winner_disabled_{participant_id}",
