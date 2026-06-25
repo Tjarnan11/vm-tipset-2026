@@ -1022,6 +1022,57 @@ def render_knockout_team_update_form() -> None:
         else:
             st.error("Kunde inte uppdatera lagen.")
 
+def _get_match_round_id(match: dict) -> str | None:
+    round_info = match.get("knockout_rounds") or {}
+    return match.get("round_id") or round_info.get("id")
+
+
+def _looks_like_knockout_placeholder(value: str | None) -> bool:
+    if not value:
+        return True
+
+    text = str(value).strip().lower()
+
+    placeholder_markers = [
+        "grupp",
+        "group",
+        "vinnare",
+        "winner",
+        "förlorare",
+        "loser",
+        "bästa",
+        "trea",
+        "3:a",
+        "1:a",
+        "2:a",
+        "match",
+    ]
+
+    return any(marker in text for marker in placeholder_markers)
+
+
+def _is_actual_team_assigned(
+    current_team: str | None,
+    original_placeholder: str | None,
+) -> bool:
+    if not _has_value(current_team):
+        return False
+
+    current_team_clean = str(current_team).strip()
+    placeholder_clean = (
+        str(original_placeholder).strip()
+        if original_placeholder
+        else ""
+    )
+
+    if placeholder_clean and current_team_clean == placeholder_clean:
+        return False
+
+    if _looks_like_knockout_placeholder(current_team_clean):
+        return False
+
+    return True
+
 def _build_knockout_round_status_rows(
     participants: list[dict],
     knockout_round: dict,
@@ -1431,6 +1482,148 @@ def render_knockout_participant_status_admin_section() -> None:
         hide_index=True,
     )
 
+def render_knockout_match_assignment_status_admin_section() -> None:
+    """
+    Visar status för hur många slutspelsmatcher som har faktiska lag ifyllda.
+
+    Detta är bara adminstöd och visar inga deltagartips.
+    """
+
+    st.subheader("Slutspel – lagstatus")
+
+    st.caption(
+        "Här ser du hur många lagplatser som är ersatta med faktiska lag. "
+        "Detta påverkar inte tipsen och visar inga deltagartips."
+    )
+
+    rounds = get_knockout_rounds()
+    matches = get_knockout_matches()
+
+    if not rounds:
+        st.info("Inga slutspelsrundor finns ännu.")
+        return
+
+    if not matches:
+        st.info("Inga slutspelsmatcher finns ännu.")
+        return
+
+    sorted_rounds = sorted(
+        rounds,
+        key=lambda knockout_round: knockout_round.get("sort_order", 999),
+    )
+
+    matches_by_round_id: dict[str, list[dict]] = {}
+
+    for match in matches:
+        round_id = _get_match_round_id(match)
+
+        if not round_id:
+            continue
+
+        matches_by_round_id.setdefault(round_id, []).append(match)
+
+    summary_rows = []
+
+    for knockout_round in sorted_rounds:
+        round_id = knockout_round["id"]
+        round_name = knockout_round.get("name", "Okänd runda")
+        round_matches = matches_by_round_id.get(round_id, [])
+
+        total_matches = len(round_matches)
+        total_slots = total_matches * 2
+
+        assigned_slots = 0
+        complete_matches = 0
+
+        for match in round_matches:
+            home_assigned = _is_actual_team_assigned(
+                match.get("home_team"),
+                match.get("home_placeholder"),
+            )
+            away_assigned = _is_actual_team_assigned(
+                match.get("away_team"),
+                match.get("away_placeholder"),
+            )
+
+            assigned_slots += int(home_assigned) + int(away_assigned)
+
+            if home_assigned and away_assigned:
+                complete_matches += 1
+
+        missing_slots = total_slots - assigned_slots
+
+        summary_rows.append(
+            {
+                "Runda": round_name,
+                "Matcher klara": f"{complete_matches}/{total_matches}",
+                "Lagplatser ifyllda": f"{assigned_slots}/{total_slots}",
+                "Lagplatser kvar": missing_slots,
+            }
+        )
+
+    st.dataframe(
+        pd.DataFrame(summary_rows),
+        width="stretch",
+        hide_index=True,
+    )
+
+    st.markdown("#### Matcher med placeholders kvar")
+
+    round_label_by_id = {
+        knockout_round["id"]: knockout_round.get("name", "Okänd runda")
+        for knockout_round in sorted_rounds
+    }
+
+    selected_round_id = st.selectbox(
+        "Välj runda för detaljer",
+        options=list(round_label_by_id.keys()),
+        format_func=lambda round_id: round_label_by_id[round_id],
+        key="knockout_match_assignment_round_select",
+    )
+
+    selected_round_matches = matches_by_round_id.get(selected_round_id, [])
+
+    detail_rows = []
+
+    for match in sorted(
+        selected_round_matches,
+        key=lambda item: item.get("match_no", 999),
+    ):
+        home_assigned = _is_actual_team_assigned(
+            match.get("home_team"),
+            match.get("home_placeholder"),
+        )
+        away_assigned = _is_actual_team_assigned(
+            match.get("away_team"),
+            match.get("away_placeholder"),
+        )
+
+        if home_assigned and away_assigned:
+            continue
+
+        assigned_count = int(home_assigned) + int(away_assigned)
+
+        detail_rows.append(
+            {
+                "Match": f"Match {match.get('match_no')}",
+                "Status": f"{assigned_count}/2",
+                "Hemmaplats": match.get("home_placeholder") or "-",
+                "Hemmalag": match.get("home_team") or "-",
+                "Bortaplats": match.get("away_placeholder") or "-",
+                "Bortalag": match.get("away_team") or "-",
+            }
+        )
+
+    if not detail_rows:
+        st.success("Alla matcher i vald runda har faktiska lag ifyllda.")
+        return
+
+    st.dataframe(
+        pd.DataFrame(detail_rows),
+        width="stretch",
+        hide_index=True,
+    )
+
 def render_knockout_rounds_admin_section() -> None:
     """
     Adminsektion för slutspelsrundor.
@@ -1596,6 +1789,10 @@ def render_knockout_admin_section() -> None:
         )
 
         render_knockout_participant_status_admin_section()
+
+        st.divider()
+
+        render_knockout_match_assignment_status_admin_section()
 
     with tab_rounds:
         render_knockout_rounds_admin_section()
