@@ -809,7 +809,22 @@ def _get_candidate_teams_for_placeholder(
     placeholder: str | None,
     teams_by_group: dict[str, list[str]],
     all_teams: list[str],
+    knockout_matches: list[dict] | None = None,
 ) -> tuple[list[str], str]:
+
+    if knockout_matches:
+        knockout_candidates, knockout_help_text = (
+            _get_candidate_teams_from_previous_knockout_match(
+                placeholder,
+                knockout_matches,
+            )
+        )
+
+        if knockout_candidates:
+            return knockout_candidates, knockout_help_text or "Förslag från tidigare slutspelsmatch."
+    
+    
+
     group_letters = _extract_group_letters_from_placeholder(placeholder)
 
     if not group_letters:
@@ -912,12 +927,14 @@ def render_knockout_team_update_form() -> None:
         home_placeholder,
         teams_by_group,
         all_teams,
+        matches,
     )
 
     away_candidates, away_help_text = _get_candidate_teams_for_placeholder(
         away_placeholder,
         teams_by_group,
         all_teams,
+        matches,
     )
 
     home_options = _build_team_select_options(
@@ -1021,6 +1038,65 @@ def render_knockout_team_update_form() -> None:
             st.info("Ladda om sidan för att se uppdateringen i tabellen.")
         else:
             st.error("Kunde inte uppdatera lagen.")
+
+def _extract_match_number_from_placeholder(placeholder: str | None) -> int | None:
+    if not placeholder:
+        return None
+
+    text = str(placeholder).upper()
+
+    match = re.search(r"MATCH\s*(\d+)", text)
+
+    if not match:
+        return None
+
+    try:
+        return int(match.group(1))
+    except ValueError:
+        return None
+
+
+def _get_candidate_teams_from_previous_knockout_match(
+    placeholder: str | None,
+    knockout_matches: list[dict],
+) -> tuple[list[str], str | None]:
+    match_number = _extract_match_number_from_placeholder(placeholder)
+
+    if match_number is None:
+        return [], None
+
+    source_match = next(
+        (
+            match for match in knockout_matches
+            if match.get("match_no") == match_number
+        ),
+        None,
+    )
+
+    if not source_match:
+        return [], f"Kunde inte hitta match {match_number}."
+
+    candidates = []
+
+    if _is_actual_team_assigned(
+        source_match.get("home_team"),
+        source_match.get("home_placeholder"),
+    ):
+        candidates.append(source_match["home_team"])
+
+    if _is_actual_team_assigned(
+        source_match.get("away_team"),
+        source_match.get("away_placeholder"),
+    ):
+        candidates.append(source_match["away_team"])
+
+    if not candidates:
+        return [], (
+            f"Match {match_number} har ännu inga faktiska lag ifyllda. "
+            "Visar bredare kandidatlista."
+        )
+
+    return sorted(set(candidates)), f"Förslag från lagen i match {match_number}."
 
 def _get_match_round_id(match: dict) -> str | None:
     round_info = match.get("knockout_rounds") or {}
