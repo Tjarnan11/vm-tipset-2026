@@ -284,26 +284,69 @@ def render_knockout_final_prediction_section(
 
         return
 
-    with st.form("knockout_final_prediction_form"):
-        finalist_1 = st.text_input(
-            "Finalist 1",
-            value=existing_finalist_1,
-            placeholder="Exempel: Brasilien",
-        )
+    finalist_1 = st.text_input(
+        "Finalist 1",
+        value=existing_finalist_1,
+        placeholder="Exempel: Brasilien",
+        key=f"final_prediction_finalist_1_{participant_id}",
+    )
 
-        finalist_2 = st.text_input(
-            "Finalist 2",
-            value=existing_finalist_2,
-            placeholder="Exempel: Frankrike",
-        )
+    finalist_2 = st.text_input(
+        "Finalist 2",
+        value=existing_finalist_2,
+        placeholder="Exempel: Frankrike",
+        key=f"final_prediction_finalist_2_{participant_id}",
+    )
 
-        winner = st.text_input(
+    cleaned_finalist_1_preview = finalist_1.strip()
+    cleaned_finalist_2_preview = finalist_2.strip()
+    existing_winner_clean = existing_winner.strip()
+
+    winner_options = []
+
+    if cleaned_finalist_1_preview:
+        winner_options.append(cleaned_finalist_1_preview)
+
+    if (
+        cleaned_finalist_2_preview
+        and cleaned_finalist_2_preview.lower()
+        != cleaned_finalist_1_preview.lower()
+    ):
+        winner_options.append(cleaned_finalist_2_preview)
+
+    if winner_options:
+        winner_select_options = ["Välj vinnare"] + winner_options
+
+        winner_index = 0
+
+        for index, option in enumerate(winner_select_options):
+            if option.lower() == existing_winner_clean.lower():
+                winner_index = index
+                break
+
+        winner = st.selectbox(
             "Vinnare",
-            value=existing_winner,
-            placeholder="Exempel: Brasilien",
+            options=winner_select_options,
+            index=winner_index,
+            key=f"final_prediction_winner_{participant_id}",
         )
 
-        submitted = st.form_submit_button("Spara finaltips")
+        if winner == "Välj vinnare":
+            winner = ""
+    else:
+        st.selectbox(
+            "Vinnare",
+            options=["Fyll i finallag först"],
+            disabled=True,
+            key=f"final_prediction_winner_disabled_{participant_id}",
+        )
+
+        winner = ""
+
+    submitted = st.button(
+        "Spara finaltips",
+        key=f"save_final_prediction_{participant_id}",
+    )
 
     if submitted:
         cleaned_finalist_1 = finalist_1.strip()
@@ -381,23 +424,69 @@ def render_knockout_final_admin_section() -> None:
         else ""
     )
 
-    with st.form("knockout_final_result_form"):
-        finalist_1 = st.text_input(
-            "Faktisk finalist 1",
-            value=existing_finalist_1,
+    finalist_1 = st.text_input(
+        "Finalist 1",
+        value=existing_finalist_1,
+        placeholder="Exempel: Brasilien",
+        key="final_result_finalist_1",
+    )
+
+    finalist_2 = st.text_input(
+        "Finalist 2",
+        value=existing_finalist_2,
+        placeholder="Exempel: Frankrike",
+        key="final_result_finalist_2",
+    )
+
+    cleaned_finalist_1_preview = finalist_1.strip()
+    cleaned_finalist_2_preview = finalist_2.strip()
+    existing_winner_clean = existing_winner.strip()
+
+    winner_options = []
+
+    if cleaned_finalist_1_preview:
+        winner_options.append(cleaned_finalist_1_preview)
+
+    if (
+        cleaned_finalist_2_preview
+        and cleaned_finalist_2_preview.lower()
+        != cleaned_finalist_1_preview.lower()
+    ):
+        winner_options.append(cleaned_finalist_2_preview)
+
+    if winner_options:
+        winner_select_options = ["Välj vinnare"] + winner_options
+
+        winner_index = 0
+
+        for index, option in enumerate(winner_select_options):
+            if option.lower() == existing_winner_clean.lower():
+                winner_index = index
+                break
+
+        winner = st.selectbox(
+            "Vinnare",
+            options=winner_select_options,
+            index=winner_index,
+            key="final_result_winner",
         )
 
-        finalist_2 = st.text_input(
-            "Faktisk finalist 2",
-            value=existing_finalist_2,
+        if winner == "Välj vinnare":
+            winner = ""
+    else:
+        st.selectbox(
+            "Vinnare",
+            options=["Fyll i finallag först"],
+            disabled=True,
+            key="final_result_winner_disabled",
         )
 
-        winner = st.text_input(
-            "Faktisk vinnare",
-            value=existing_winner,
-        )
+        winner = ""
 
-        submitted = st.form_submit_button("Spara finalutfall")
+    submitted = st.button(
+        "Spara finalutfall",
+        key="save_final_result",
+    )
 
     if submitted:
         cleaned_finalist_1 = finalist_1.strip()
