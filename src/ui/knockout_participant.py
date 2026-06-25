@@ -382,7 +382,9 @@ def render_knockout_rules_section() -> None:
         Innan slutspelet börjar tippar du också:
 
         - vilka två lag som går till final
-        - vilket av dina två finallag som vinner finalen
+        - vilket av dina två finallag som vinner VM pokalen
+
+        Notera att i detta tips gäller såklart inte resultatet efter ordinarie tid, utan det slutliga resultatet efter eventuell förlängning och straffläggning.
 
         Vinnaren måste alltså vara ett av de två lag du har valt som finalister.
 

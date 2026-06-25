@@ -326,7 +326,7 @@ def render_knockout_final_prediction_section(
                 break
 
         winner = st.selectbox(
-            "Vinnare",
+            "Vinnare av VM",
             options=winner_select_options,
             index=winner_index,
             key=f"final_prediction_winner_{participant_id}",
