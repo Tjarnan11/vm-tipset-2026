@@ -111,31 +111,147 @@ def get_prediction_outcome_text(prediction: dict) -> str:
         int(prediction["predicted_away_goals"]),
     )
 
+def _get_match_round_id(match: dict) -> str | None:
+    round_info = match.get("knockout_rounds") or {}
+    return match.get("round_id") or round_info.get("id")
+
+
+def _looks_like_knockout_placeholder(value: str | None) -> bool:
+    if not value:
+        return True
+
+    text = str(value).strip().lower()
+
+    placeholder_markers = [
+        "grupp",
+        "group",
+        "vinnare",
+        "winner",
+        "förlorare",
+        "loser",
+        "bästa",
+        "trea",
+        "3:a",
+        "1:a",
+        "2:a",
+        "match",
+    ]
+
+    return any(marker in text for marker in placeholder_markers)
+
+
+def _is_actual_team_assigned(
+    current_team: str | None,
+    original_placeholder: str | None,
+) -> bool:
+    if not current_team:
+        return False
+
+    current_team_clean = str(current_team).strip()
+
+    if not current_team_clean:
+        return False
+
+    placeholder_clean = (
+        str(original_placeholder).strip()
+        if original_placeholder
+        else ""
+    )
+
+    if placeholder_clean and current_team_clean == placeholder_clean:
+        return False
+
+    if _looks_like_knockout_placeholder(current_team_clean):
+        return False
+
+    return True
+
+
+def _count_complete_match_pairs_for_round(
+    round_id: str,
+    matches: list[dict],
+) -> tuple[int, int]:
+    """
+    Returnerar antal klara matchpar och totalt antal matcher för en runda.
+
+    Ett matchpar räknas som klart när både hemma- och bortalag är faktiska lag,
+    inte placeholders.
+    """
+
+    round_matches = [
+        match
+        for match in matches
+        if _get_match_round_id(match) == round_id
+    ]
+
+    complete_match_pairs = 0
+
+    for match in round_matches:
+        home_assigned = _is_actual_team_assigned(
+            match.get("home_team"),
+            match.get("home_placeholder"),
+        )
+
+        away_assigned = _is_actual_team_assigned(
+            match.get("away_team"),
+            match.get("away_placeholder"),
+        )
+
+        if home_assigned and away_assigned:
+            complete_match_pairs += 1
+
+    return complete_match_pairs, len(round_matches)
+
 def render_knockout_rounds_overview() -> None:
     """
     Visar slutspelsrundor för deltagaren.
     """
 
     rounds = get_knockout_rounds()
+    matches = get_knockout_matches()
 
     if not rounds:
         st.info("Slutspelet är inte förberett ännu.")
         return
 
+    st.caption(
+        "Matchpar klara visar hur många matcher i rundan som har två faktiska lag "
+        "inlagda och därmed är färdiga att tippa på."
+    )
+
+    status_label_by_value = {
+        "not_started": "Inte öppnad",
+        "open": "Öppen",
+        "locked": "Låst",
+        "finished": "Avslutad",
+    }
+
     rows = []
 
-    for knockout_round in rounds:
+    sorted_rounds = sorted(
+        rounds,
+        key=lambda knockout_round: knockout_round.get("sort_order", 999),
+    )
+
+    for knockout_round in sorted_rounds:
         deadline_at = knockout_round.get("deadline_at")
+        complete_match_pairs, total_matches = _count_complete_match_pairs_for_round(
+            round_id=knockout_round["id"],
+            matches=matches,
+        )
+
+        status = knockout_round.get("status", "not_started")
 
         rows.append(
             {
                 "Runda": knockout_round["name"],
+                "Matchpar klara": f"{complete_match_pairs}/{total_matches}",
                 "Deadline": (
                     format_datetime_swedish(deadline_at)
                     if deadline_at
                     else "-"
                 ),
-                "Status": knockout_round["status"],
+                "Status": status_label_by_value.get(status, status),
             }
         )
 
@@ -146,6 +262,7 @@ def render_knockout_rounds_overview() -> None:
         width="stretch",
         hide_index=True,
     )
+
 
 def render_knockout_rules_section() -> None:
     """
@@ -189,7 +306,7 @@ def render_knockout_rules_section() -> None:
 
         1. exakt resultat efter ordinarie tid
         2. över/under 2,5 mål efter ordinarie tid
-        3. första målskytt under ordinarie tid
+        3. eventuell första målskytt under ordinarie tid
 
         **Ordinarie tid betyder 90 minuter + tilläggstid.**
 
@@ -238,6 +355,8 @@ def render_knockout_rules_section() -> None:
         Mål i förlängning eller straffläggning räknas inte.
 
         Eftersom detta är fritext bedömer admin manuellt om tipset är rätt eller fel.
+
+        Du kan lämna första målskytt tomt, men då kan du inte få poäng för första målskytt på den matchen.
         """
     )
 
@@ -285,7 +404,7 @@ def render_knockout_rules_section() -> None:
 
         Slutspelstabellen sorteras i första hand efter totalpoäng.
 
-        Vid lika poäng används just nu:
+        Vid lika poäng används:
 
         1. flest exakta resultat
         2. flest rätt 1/X/2
@@ -315,9 +434,9 @@ def render_knockout_rules_section() -> None:
 
         Admin sköter rundor, deadlines, slutspelsmatcher, resultat och manuell bedömning av fritextsvar.
 
-        Deltagarnas slutspelstips ska inte visas för andra deltagare förrän relevant runda är låst.
+        Deltagarnas slutspelstips ska inte visas för andra deltagare förrän relevant rundas deadline har passerat eller rundan är låst.
 
-        Efter att en runda är låst kan tips och poäng för den rundan visas.
+        Efter att deadline har passerat eller rundan är låst kan tips och poäng för den rundan visas.
         """
     )
 
@@ -548,7 +667,8 @@ def render_knockout_matches_overview() -> None:
         return
     
     st.caption(
-        "Allas tips visas per match när respektive runda är låst."
+        "Allas tips visas per match när respektive rundas deadline har passerat "
+        "eller när rundan är låst."
     )
 
     participants = get_active_participants()
