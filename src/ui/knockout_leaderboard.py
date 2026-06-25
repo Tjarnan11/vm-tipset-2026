@@ -57,11 +57,11 @@ def render_knockout_leaderboard_section() -> None:
         "Placering",
         "Namn",
         "Poäng",
-        "Finalpoäng",
         "Exakta resultat",
         "Rätt 1X2",
         "Rätt Ö/U",
         "Rätt första målskytt",
+        "Finalpoäng",
         "Rätt finallag",
         "Rätt finalvinnare",
         "Räknade matcher",
@@ -78,5 +78,9 @@ def render_knockout_leaderboard_section() -> None:
 
     st.caption(
         "Slutspelspoäng: 1p rätt 1/X/2, 1p rätt över/under, "
-        "2p exakt resultat och 4p rätt första målskytt."
+        "2p exakt resultat och 4p rätt första målskytt. "
+        "Finaltips ger 5p per rätt finallag och 10p för rätt vinnare. "
+        "Vid lika poäng sorteras tabellen på antal exakta resultat, "
+        "antal rätt 1/X/2 och antal rätt första målskytt. "
+        "Om även detta är lika delas placeringen."
     )

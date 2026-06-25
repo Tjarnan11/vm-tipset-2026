@@ -239,11 +239,6 @@ def build_knockout_leaderboard(
         row["Rätt finallag"] = final_score["correct_finalists_count"]
         row["Rätt finalvinnare"] = final_score["winner_correct_count"]
 
-        # När finaltips är bedömda blir maxpoängen +20.
-        # Detta är en förenkling: maxpoäng just nu visar max från spelade
-        # slutspelsmatcher plus finalbonus när finaltips finns/bedöms.
-        if final_prediction is not None:
-            row["Maxpoäng just nu"] += 20
 
     leaderboard = list(leaderboard_by_participant_id.values())
 
