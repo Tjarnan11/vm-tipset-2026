@@ -757,6 +757,40 @@ def _get_all_group_stage_teams() -> list[str]:
 
     return sorted(teams)
 
+def _get_deadline_input_defaults(deadline_at: str | None) -> tuple[date, time]:
+    """
+    Returnerar datum och tid för Streamlit-inputs baserat på befintlig deadline.
+
+    Supabase sparar oftast tiden i UTC. Här visas den i svensk tid.
+    """
+
+    fallback_date = date.today()
+    fallback_time = time(21, 0)
+
+    if not deadline_at:
+        return fallback_date, fallback_time
+
+    try:
+        deadline_datetime = datetime.fromisoformat(
+            str(deadline_at).replace("Z", "+00:00")
+        )
+
+        if deadline_datetime.tzinfo is None:
+            deadline_datetime = deadline_datetime.replace(
+                tzinfo=ZoneInfo("UTC")
+            )
+
+        swedish_deadline = deadline_datetime.astimezone(
+            ZoneInfo("Europe/Stockholm")
+        )
+
+        return swedish_deadline.date(), swedish_deadline.time().replace(
+            second=0,
+            microsecond=0,
+        )
+
+    except ValueError:
+        return fallback_date, fallback_time
 
 def _get_teams_by_group() -> dict[str, list[str]]:
     matches = get_matches()
@@ -1776,21 +1810,28 @@ def render_knockout_rounds_admin_section() -> None:
         else 0
     )
 
-    with st.form("knockout_round_form"):
+    current_deadline_date, current_deadline_time = _get_deadline_input_defaults(
+    selected_round.get("deadline_at")
+)
+
+    with st.form(f"knockout_round_form_{selected_round_id}"):
         selected_date = st.date_input(
             "Deadline-datum",
-            value=date(2026, 6, 27),
+            value=current_deadline_date,
+            key=f"knockout_round_deadline_date_{selected_round_id}",
         )
 
         selected_time = st.time_input(
             "Deadline-tid svensk tid",
-            value=time(18, 0),
+            value=current_deadline_time,
+            key=f"knockout_round_deadline_time_{selected_round_id}",
         )
 
         selected_status = st.selectbox(
             "Status",
             options=status_options,
             index=status_index,
+            key=f"knockout_round_status_{selected_round_id}",
         )
 
         submitted = st.form_submit_button("Spara runda")
