@@ -332,6 +332,8 @@ def render_knockout_csv_import_section() -> None:
                 "kickoff_at": kickoff_at,
                 "home_team": home_team,
                 "away_team": away_team,
+                "home_placeholder": home_team,
+                "away_placeholder": away_team,
                 "status": "scheduled",
             }
         )
