@@ -8,6 +8,7 @@
 from datetime import date, time
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import unicodedata
 
 import pandas as pd
 import streamlit as st
@@ -538,6 +539,30 @@ def parse_first_scorer_status(label: str) -> bool | None:
 
     return None
 
+
+def normalize_first_scorer_pick_for_grouping(value: str | None) -> str:
+    """
+    Normaliserar målskyttstips för admin-gruppering.
+
+    Detta används bara för att förenkla manuell bedömning. Originaltexten
+    sparas oförändrad och visas fortfarande för admin.
+    """
+
+    if not value:
+        return ""
+
+    normalized = unicodedata.normalize("NFKD", str(value).strip())
+    without_accents = "".join(
+        character
+        for character in normalized
+        if not unicodedata.combining(character)
+    )
+
+    lowercase_text = without_accents.lower()
+    letters_and_numbers_only = re.sub(r"[^a-z0-9]+", " ", lowercase_text)
+
+    return " ".join(letters_and_numbers_only.split())
+
 def is_knockout_round_public(knockout_round: dict) -> bool:
     """
     Kontrollerar om en slutspelsrundas tips får visas.
@@ -685,6 +710,171 @@ def render_first_scorer_admin_section() -> None:
         "Tips markerade som Rätt ger 4 poäng i slutspelstabellen. "
         "Ej bedömt och Fel ger 0 poäng."
     )
+
+    st.subheader("Uppdatera samma målskytt för flera")
+
+    predictions_by_first_scorer: dict[str, list[dict]] = {}
+    first_scorer_variants_by_key: dict[str, set[str]] = {}
+
+    for prediction in predictions_for_match:
+        first_scorer_pick = (
+            prediction.get("first_scorer_pick") or ""
+        ).strip()
+
+        if not first_scorer_pick:
+            continue
+
+        grouping_key = normalize_first_scorer_pick_for_grouping(
+            first_scorer_pick
+        )
+
+        if not grouping_key:
+            continue
+
+        predictions_by_first_scorer.setdefault(
+            grouping_key,
+            [],
+        ).append(prediction)
+
+        first_scorer_variants_by_key.setdefault(
+            grouping_key,
+            set(),
+        ).add(first_scorer_pick)
+
+    if not predictions_by_first_scorer:
+        st.info("Inga ifyllda målskyttstips finns att gruppbedöma.")
+    else:
+        group_rows = []
+
+        for grouping_key, scorer_predictions in sorted(
+            predictions_by_first_scorer.items(),
+            key=lambda item: (-len(item[1]), item[0].lower()),
+        ):
+            first_scorer_variants = sorted(
+                first_scorer_variants_by_key[grouping_key],
+                key=str.lower,
+            )
+
+            status_labels = {
+                format_first_scorer_status(
+                    prediction.get("first_scorer_correct")
+                )
+                for prediction in scorer_predictions
+            }
+
+            status_text = (
+                next(iter(status_labels))
+                if len(status_labels) == 1
+                else "Blandat"
+            )
+
+            participant_names = [
+                participant_name_by_id.get(
+                    prediction["participant_id"],
+                    "Okänd deltagare",
+                )
+                for prediction in scorer_predictions
+            ]
+
+            group_rows.append(
+                {
+                    "Målskytt": first_scorer_variants[0],
+                    "Stavningar": ", ".join(first_scorer_variants),
+                    "Antal": len(scorer_predictions),
+                    "Status": status_text,
+                    "Deltagare": ", ".join(participant_names),
+                    "_grouping_key": grouping_key,
+                }
+            )
+
+        st.dataframe(
+            pd.DataFrame(group_rows).drop(columns=["_grouping_key"]),
+            width="stretch",
+            hide_index=True,
+        )
+
+        scorer_options = [
+            row["_grouping_key"]
+            for row in group_rows
+        ]
+
+        group_row_by_key = {
+            row["_grouping_key"]: row
+            for row in group_rows
+        }
+
+        selected_first_scorer_key = st.selectbox(
+            "Välj målskyttsgrupp",
+            options=scorer_options,
+            format_func=lambda grouping_key: (
+                f"{group_row_by_key[grouping_key]['Målskytt']} "
+                f"({len(predictions_by_first_scorer[grouping_key])} tips)"
+            ),
+            key="first_scorer_group_select",
+        )
+
+        selected_group_predictions = predictions_by_first_scorer[
+            selected_first_scorer_key
+        ]
+
+        selected_group_variants = ", ".join(
+            sorted(
+                first_scorer_variants_by_key[selected_first_scorer_key],
+                key=str.lower,
+            )
+        )
+
+        st.caption(
+            "Gruppen matchar stavningarna: "
+            f"{selected_group_variants}"
+        )
+
+        selected_group_statuses = {
+            format_first_scorer_status(
+                prediction.get("first_scorer_correct")
+            )
+            for prediction in selected_group_predictions
+        }
+
+        selected_group_status_label = (
+            next(iter(selected_group_statuses))
+            if len(selected_group_statuses) == 1
+            else "Ej bedömt"
+        )
+
+        selected_group_status = st.selectbox(
+            "Bedömning för alla i målskyttsgruppen",
+            options=status_options,
+            index=status_options.index(selected_group_status_label),
+            key="first_scorer_group_status_select",
+        )
+
+        if st.button("Spara gruppbedömning"):
+            saved_value = parse_first_scorer_status(selected_group_status)
+            failed_updates = []
+
+            for prediction in selected_group_predictions:
+                updated_prediction = update_first_scorer_correct(
+                    prediction_id=prediction["id"],
+                    first_scorer_correct=saved_value,
+                )
+
+                if not updated_prediction:
+                    failed_updates.append(prediction["id"])
+
+            if failed_updates:
+                st.error(
+                    "Kunde inte spara alla gruppbedömningar. "
+                    f"{len(failed_updates)} uppdateringar misslyckades."
+                )
+            else:
+                st.success(
+                    "Gruppbedömningen är sparad för "
+                    f"{len(selected_group_predictions)} tips."
+                )
+                st.info("Ladda om sidan för att se uppdaterad tabell.")
+
+    st.divider()
 
     st.subheader("Uppdatera bedömning")
 

@@ -6,6 +6,7 @@ from src.knockout_scoring import (
 )
 
 from src.knockout_scoring import build_knockout_leaderboard
+from src.ui.knockout_admin import normalize_first_scorer_pick_for_grouping
 
 
 def test_get_knockout_prediction_outcome_home_win():
@@ -217,3 +218,17 @@ def test_build_knockout_leaderboard_with_final_points():
     assert erik["Rätt finallag"] == 1
     assert erik["Rätt finalvinnare"] == 0
     assert erik["Placering"] == 2
+
+
+def test_normalize_first_scorer_pick_groups_accents_and_case():
+    assert (
+        normalize_first_scorer_pick_for_grouping("Vinícius Júnior")
+        == normalize_first_scorer_pick_for_grouping("vinicius junior")
+    )
+
+
+def test_normalize_first_scorer_pick_groups_punctuation_and_spaces():
+    assert (
+        normalize_first_scorer_pick_for_grouping("  Kylian-Mbappé ")
+        == normalize_first_scorer_pick_for_grouping("Kylian Mbappe")
+    )
