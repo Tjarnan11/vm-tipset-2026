@@ -596,7 +596,8 @@ def render_participant_page(token: str) -> None:
             "⚽ Gruppspel",
             "🏆 Slutspel",
             "ℹ️ Regler",
-        ]
+        ],
+        default="🏆 Slutspel",
     )
 
     with tab_group_stage:
@@ -672,7 +673,7 @@ def render_participant_page(token: str) -> None:
                 render_group_stage_stats_section()
             else:
                 st.info("Gruppspelsstatistik visas när deadline har passerat.")
-    
+
     with tab_knockout:
         render_knockout_participant_section(participant)
 
