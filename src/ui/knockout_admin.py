@@ -711,6 +711,42 @@ def render_first_scorer_admin_section() -> None:
         "Ej bedömt och Fel ger 0 poäng."
     )
 
+    st.subheader("Markera alla som fel")
+
+    st.caption(
+        "Använd detta när matchens första målskytt inte finns bland någons tips."
+    )
+
+    mark_all_wrong_clicked = st.button(
+        "Markera alla målskyttstips som fel",
+        key="first_scorer_mark_all_wrong",
+    )
+
+    if mark_all_wrong_clicked:
+        failed_updates = []
+
+        for prediction in predictions_for_match:
+            updated_prediction = update_first_scorer_correct(
+                prediction_id=prediction["id"],
+                first_scorer_correct=False,
+            )
+
+            if not updated_prediction:
+                failed_updates.append(prediction["id"])
+
+        if failed_updates:
+            st.error(
+                "Kunde inte markera alla målskyttstips som fel. "
+                f"{len(failed_updates)} uppdateringar misslyckades."
+            )
+        else:
+            st.success(
+                "Alla målskyttstips för matchen är markerade som fel."
+            )
+            st.info("Ladda om sidan för att se uppdaterad tabell.")
+
+    st.divider()
+
     st.subheader("Uppdatera samma målskytt för flera")
 
     predictions_by_first_scorer: dict[str, list[dict]] = {}
