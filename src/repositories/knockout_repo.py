@@ -232,6 +232,35 @@ def get_all_knockout_predictions() -> list[dict]:
     return response.data
 
 
+def get_knockout_predictions_for_matches(
+    match_ids: list[str],
+) -> list[dict]:
+    """
+    Hämtar slutspelstips för en avgränsad lista matcher.
+
+    Används i publika statistikvyer så att framtida rundors tips inte ens
+    hämtas från databasen.
+    """
+
+    if not match_ids:
+        return []
+
+    supabase = get_supabase_client()
+
+    response = (
+        supabase.table("knockout_predictions")
+        .select(
+            "id, participant_id, match_id, predicted_home_goals, "
+            "predicted_away_goals, goals_pick, first_scorer_pick, "
+            "first_scorer_correct, updated_at"
+        )
+        .in_("match_id", match_ids)
+        .execute()
+    )
+
+    return response.data
+
+
 def save_knockout_predictions(
     participant_id: str,
     predictions: list[dict],

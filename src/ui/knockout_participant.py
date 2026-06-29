@@ -25,6 +25,7 @@ from src.time_utils import format_datetime_swedish
 from src.ui.formatting import format_goals_pick_label
 
 from src.ui.knockout_leaderboard import render_knockout_leaderboard_section
+from src.ui.knockout_stats import render_knockout_stats_section
 
 from src.ui.knockout_final import render_knockout_final_prediction_section
 
@@ -1120,6 +1121,7 @@ def render_knockout_participant_section(
         tab_saved_predictions,
         tab_matches,
         tab_leaderboard,
+        tab_stats,
         tab_rules,
     ) = st.tabs(
         [
@@ -1129,6 +1131,7 @@ def render_knockout_participant_section(
             "✅ Sparade tips",
             "📅 Matcher",
             "📊 Tabell",
+            "📈 Statistik",
             "ℹ️ Regler",
         ]
     )
@@ -1173,6 +1176,9 @@ def render_knockout_participant_section(
 
     with tab_leaderboard:
         render_knockout_leaderboard_section()
+
+    with tab_stats:
+        render_knockout_stats_section()
 
     with tab_rules:
         render_knockout_rules_section()
